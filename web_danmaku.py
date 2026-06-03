@@ -34,6 +34,7 @@ ROOMS_PATH = "rooms.json"
 STATS_DIR = "stats"
 GIFT_NAMES_PATH = "gift_names.json"
 PW_PATH = "ui_password.txt"
+CHAT_URL_FILE = "chatroom_url.txt"   # 啟動腳本寫入聊天室的 Cloudflare 公網網址
 DEFAULT_PASSWORD = "0425"
 AUTH_PASSWORD = ""
 HISTORY_MAX = 800           # 后端保留的最近弹幕条数（刷新后回填）
@@ -783,7 +784,7 @@ PAGE = r"""<!DOCTYPE html>
 <body>
 <header>
   <h1>抖音弹幕</h1>
-  <button class="ghost" title="另開聊天室視窗" onclick="window.open('http://'+location.hostname+':3000','_blank')">開啟聊天室 ↗</button>
+  <button class="ghost" title="另開聊天室（Cloudflare 公網網址）" onclick="fetch('/chatroom_url').then(r=>r.text()).then(u=>window.open((u||'').replace(/^﻿/,'').trim()||('http://'+location.hostname+':3000'),'_blank')).catch(()=>window.open('http://'+location.hostname+':3000','_blank'))">開啟聊天室 ↗</button>
   <span class="pill" style="background:#173a26;">版本 <b id="ver" style="color:#7ee0a1;">__VERSION__</b></span>
   <span class="pill"><span id="dot" class="dot off"></span><span id="status">连接中…</span></span>
   <span class="pill">房间 <b id="room">-</b></span>
@@ -1345,6 +1346,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/" or path.startswith("/index"):
             self._send(PAGE.replace("__VERSION__", VERSION), "text/html; charset=utf-8")
+            return
+
+        if path == "/chatroom_url":
+            url = ""
+            try:
+                if os.path.exists(CHAT_URL_FILE):
+                    url = open(CHAT_URL_FILE, encoding="utf-8-sig").read().strip()
+            except Exception:
+                pass
+            self._send(url, "text/plain; charset=utf-8")
             return
 
         if path == "/room":

@@ -9,8 +9,10 @@ venv/
 .DS_Store
 *.pyc
 
-# 整合新增：不推大型 / 敏感 / 個人資料
+# 整合新增：不推大型 / 敏感 / 個人 / 執行期產物
 ui_password.txt
 .env
 stats/
 rooms.json
+chatroom_url.txt
+.cf_tunnel.log
