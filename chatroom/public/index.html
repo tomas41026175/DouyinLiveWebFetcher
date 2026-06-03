@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>悄悄話 · 群聊</title>
+  <style>
+    :root {
+      --paper: #f4ede1;
+      --paper-raised: #fbf6ec;
+      --ink: #2e2a24;
+      --ink-soft: #6b6256;
+      --accent: #c0673b;
+      --accent-soft: #e8c9b6;
+      --bubble-me: #c0673b;
+      --bubble-me-ink: #fdf4ec;
+      --bubble-peer: #ffffff;
+      --line: #e3d9c8;
+      --danger: #b1442f;
+      --glow: #fbf3e6;
+      --surface: #ffffff;
+      --sys-bg: rgba(0,0,0,.04);
+      --radius: 18px;
+      --shadow: 0 1px 2px rgba(46,42,36,.06), 0 6px 20px rgba(46,42,36,.08);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+        "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK TC", sans-serif;
+    }
+    [data-theme="dark"] {
+      --paper: #1e1a16;
+      --paper-raised: #29241f;
+      --ink: #f0e8db;
+      --ink-soft: #aa9d8b;
+      --accent: #d2814f;
+      --accent-soft: #4a3527;
+      --bubble-me: #c0673b;
+      --bubble-me-ink: #fdf4ec;
+      --bubble-peer: #2f2925;
+      --line: #3a342d;
+      --danger: #d9694f;
+      --glow: #2a241e;
+      --surface: #221d19;
+      --sys-bg: rgba(255,255,255,.06);
+      --shadow: 0 1px 2px rgba(0,0,0,.25), 0 6px 20px rgba(0,0,0,.3);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 80% -10%, var(--glow) 0%, transparent 60%),
+        var(--paper);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column;
+      height: 100dvh; overflow: hidden;
+    }
+
+    /* ---- 大廳 ---- */
+    .lobby {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 24px; gap: 28px; text-align: center; overflow-y: auto;
+    }
+    .brand h1 { font-size: 30px; letter-spacing: .5px; font-weight: 700; }
+    .brand p { color: var(--ink-soft); margin-top: 8px; font-size: 14px; }
+    .panel {
+      width: 100%; max-width: 380px;
+      background: var(--paper-raised); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 22px; display: flex; flex-direction: column; gap: 14px;
+    }
+    .btn {
+      border: none; border-radius: 12px; padding: 14px 16px;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      transition: transform .06s ease, filter .15s ease; color: inherit;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--ink-soft); }
+    .divider { display: flex; align-items: center; gap: 10px; color: var(--ink-soft); font-size: 13px; }
+    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    .code-input {
+      width: 100%; padding: 14px; font-size: 22px; text-align: center;
+      letter-spacing: 8px; text-transform: uppercase; font-weight: 700;
+      border: 1px solid var(--line); border-radius: 12px;
+      background: var(--surface); color: var(--ink); font-family: inherit;
+    }
+    .code-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .name-input {
+      width: 100%; padding: 13px 14px; font-size: 16px; text-align: center;
+      border: 1px solid var(--line); border-radius: 12px;
+      background: var(--surface); color: var(--ink); font-family: inherit;
+    }
+    .name-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .hint { font-size: 12px; color: var(--ink-soft); }
+
+    /* ---- 進階設定 ---- */
+    .settings { border-top: 1px solid var(--line); padding-top: 14px; }
+    .settings > summary {
+      cursor: pointer; font-size: 13px; color: var(--ink-soft);
+      list-style: none; user-select: none; text-align: left;
+    }
+    .settings > summary::-webkit-details-marker { display: none; }
+    .settings > summary::after { content: " ▾"; }
+    .settings[open] > summary::after { content: " ▴"; }
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-top: 14px; font-size: 14px; text-align: left;
+    }
+    .setting-row select {
+      padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--surface); color: var(--ink); font-family: inherit; font-size: 16px;
+    }
+    .switch { position: relative; width: 46px; height: 28px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider {
+      position: absolute; inset: 0; background: var(--line);
+      border-radius: 999px; transition: background .2s; cursor: pointer;
+    }
+    .switch .slider::before {
+      content: ""; position: absolute; width: 22px; height: 22px;
+      left: 3px; top: 3px; background: #fff; border-radius: 50%;
+      transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    }
+    .switch input:checked + .slider { background: var(--accent); }
+    .switch input:checked + .slider::before { transform: translateX(18px); }
+
+    /* ---- 聊天室 ---- */
+    .chat { flex: 1; display: none; flex-direction: column; min-height: 0; }
+    .chat.active { display: flex; }
+    .topbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top, 0));
+      background: var(--paper-raised); border-bottom: 1px solid var(--line);
+    }
+    .topbar .dot { width: 9px; height: 9px; border-radius: 50%; background: #b9b1a3; flex: none; }
+    .topbar.online .dot { background: #4c9e6a; }
+    .topbar .title { font-weight: 600; font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .topbar .room { margin-left: auto; font-size: 13px; color: var(--ink-soft); flex: none; }
+    .topbar .room b { color: var(--accent); letter-spacing: 2px; }
+    .lock-btn {
+      display: none; flex: none; border: 1px solid var(--line); background: transparent;
+      color: var(--ink-soft); border-radius: 8px; padding: 5px 10px; font-size: 12px;
+      cursor: pointer; font-family: inherit;
+    }
+    .lock-btn.show { display: inline-block; }
+    .lock-btn.locked { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+    .messages {
+      flex: 1; overflow-y: auto; padding: 18px 14px;
+      display: flex; flex-direction: column; gap: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    @keyframes bubbleIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .row { display: flex; align-items: flex-end; gap: 6px; animation: bubbleIn 200ms ease-out; }
+    .row.me { justify-content: flex-end; }
+    .row.cont { margin-top: -6px; }
+    .meta { flex: none; font-size: 11px; color: var(--ink-soft); white-space: nowrap; padding-bottom: 3px; }
+    .meta .sent { color: #4c9e6a; }
+    .bubble {
+      width: fit-content; padding: 10px 14px; border-radius: 16px;
+      font-size: 15px; line-height: 1.45;
+      white-space: normal; overflow-wrap: break-word; word-break: normal;
+      box-shadow: var(--shadow);
+    }
+    .row.me .bubble { max-width: 78%; background: var(--bubble-me); color: var(--bubble-me-ink); border-bottom-right-radius: 5px; }
+    .row.peer .bubble { max-width: 100%; background: var(--bubble-peer); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+    .stack { display: flex; flex-direction: column; max-width: 80%; }
+    .sender { font-size: 12px; font-weight: 600; margin: 0 0 3px 8px; }
+    .sys { align-self: center; font-size: 12.5px; color: var(--ink-soft); background: var(--sys-bg); padding: 5px 12px; border-radius: 999px; }
+    .typing { align-self: flex-start; color: var(--ink-soft); font-size: 13px; padding-left: 6px; height: 18px; }
+
+    /* ---- 上方直播彈幕區（高度可拖拉）---- */
+    .danmaku-pane {
+      flex: 0 0 38%; display: flex; flex-direction: column;
+      min-height: 56px; background: var(--paper); border-bottom: 1px solid var(--line);
+    }
+    .danmaku-head {
+      flex: none; padding: 7px 14px; font-size: 12px; font-weight: 600; color: var(--ink-soft);
+      background: var(--paper-raised); border-bottom: 1px solid var(--line);
+    }
+    .danmaku-head .dhint { font-weight: 400; margin-left: 8px; }
+    .danmaku-list { flex: 1; overflow-y: auto; padding: 8px 12px; -webkit-overflow-scrolling: touch; }
+    .drow { padding: 2px 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+    .drow .dname { font-weight: 600; margin-right: 6px; }
+    .drow .dtag { font-size: 11px; color: var(--ink-soft); margin-right: 4px; }
+    .d-chat .dname { color: #4f93d6; }
+    .d-gift .dname { color: #d98c3a; }
+    .d-like .dname { color: #c0673b; }
+    .d-member .dname, .d-social .dname { color: var(--ink-soft); }
+    .danmaku-empty { color: var(--ink-soft); font-size: 13px; padding: 6px; }
+
+    /* ---- 拖拉條 ---- */
+    .resizer {
+      flex: none; height: 12px; cursor: row-resize; background: var(--paper-raised);
+      position: relative; touch-action: none;
+    }
+    .resizer::before {
+      content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 44px; height: 4px; border-radius: 2px; background: var(--line);
+    }
+    .resizer:hover::before { background: var(--accent); }
+
+    .chat-pane { flex: 1; display: flex; flex-direction: column; min-height: 90px; }
+
+    .composer {
+      display: flex; gap: 10px; padding: 12px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0));
+      background: var(--paper-raised); border-top: 1px solid var(--line);
+    }
+    .composer textarea {
+      flex: 1; resize: none; border: 1px solid var(--line); border-radius: 14px;
+      padding: 11px 14px; font-size: 16px; max-height: 120px; background: var(--surface);
+      color: var(--ink); font-family: inherit; line-height: 1.4;
+    }
+    .composer textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .send {
+      border: none; background: var(--accent); color: #fff; border-radius: 14px;
+      width: 52px; font-size: 20px; cursor: pointer; flex: none;
+    }
+    .send:disabled { opacity: .4; cursor: default; }
+
+    .banner {
+      position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+      background: #3a352d; color: #fff; padding: 9px 16px; border-radius: 999px;
+      font-size: 13px; box-shadow: var(--shadow); z-index: 10;
+      opacity: 0; pointer-events: none; transition: opacity .2s ease;
+      max-width: 90vw;
+    }
+    .banner.show { opacity: 1; }
+    .banner.warn { background: var(--danger); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .row { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 大廳 -->
+  <section class="lobby" id="lobby">
+    <div class="brand">
+      <h1>悄悄話</h1>
+      <p>建立房間，把房號告訴朋友，一起聊</p>
+    </div>
+    <div class="panel">
+      <input class="name-input" id="nameInput" maxlength="16" placeholder="你的暱稱（選填）" autocomplete="off" />
+      <button class="btn btn-primary" id="createBtn">建立隨機房間</button>
+      <div class="divider">或使用固定房號</div>
+      <input class="code-input" id="codeInput" maxlength="6" placeholder="輸入房號"
+             inputmode="latin" autocapitalize="characters" autocomplete="off" />
+      <button class="btn btn-ghost" id="joinBtn">進入房號</button>
+      <p class="hint">固定房號：雙方約好同一組 6 位碼，誰先進都會自動開房等對方</p>
+
+      <details class="settings">
+        <summary>進階設定</summary>
+        <div class="setting-row">
+          <span>房間人數<br><span class="hint">建房時生效</span></span>
+          <select id="capSelect" aria-label="房間人數">
+            <option>2</option><option>3</option><option>4</option>
+            <option selected>5</option><option>6</option><option>7</option>
+            <option>8</option><option>9</option><option>10</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <span>深色模式</span>
+          <label class="switch">
+            <input type="checkbox" id="darkToggle" aria-label="深色模式" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </details>
+
+      <p class="hint" id="lobbyHint">連線中…</p>
+    </div>
+  </section>
+
+  <!-- 聊天室 -->
+  <section class="chat" id="chat">
+    <div class="topbar" id="topbar">
+      <span class="dot"></span>
+      <span class="title" id="statusText">等待其他人加入…</span>
+      <span class="room">房號 <b id="roomCode">——</b></span>
+      <button class="lock-btn" id="lockBtn">鎖定房間</button>
+    </div>
+    <!-- 上：直播彈幕 -->
+    <div class="danmaku-pane" id="danmakuPane">
+      <div class="danmaku-head">直播彈幕<span class="dhint" id="danmakuHint"></span></div>
+      <div class="danmaku-list" id="danmakuList"></div>
+    </div>
+    <!-- 拖拉條：調整彈幕／對話占比 -->
+    <div class="resizer" id="resizer" title="上下拖拉，調整彈幕與對話的畫面占比"></div>
+    <!-- 下：房間對話 -->
+    <div class="chat-pane">
+      <div class="messages" id="messages"></div>
+      <div class="typing" id="typingIndicator"></div>
+    </div>
+    <div class="composer">
+      <textarea id="msgInput" rows="1" placeholder="輸入訊息…"></textarea>
+      <button class="send" id="sendBtn" disabled>↑</button>
+    </div>
+  </section>
+
+  <div class="banner" id="banner"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      lobby: $('lobby'), chat: $('chat'), topbar: $('topbar'),
+      createBtn: $('createBtn'), joinBtn: $('joinBtn'),
+      nameInput: $('nameInput'), codeInput: $('codeInput'), lobbyHint: $('lobbyHint'),
+      capSelect: $('capSelect'), darkToggle: $('darkToggle'), lockBtn: $('lockBtn'),
+      statusText: $('statusText'), roomCode: $('roomCode'),
+      messages: $('messages'), typing: $('typingIndicator'),
+      msgInput: $('msgInput'), sendBtn: $('sendBtn'), banner: $('banner'),
+      danmakuPane: $('danmakuPane'), danmakuList: $('danmakuList'),
+      danmakuHint: $('danmakuHint'), resizer: $('resizer'),
+    };
+
+    const state = {
+      ws: null, connected: false, roomCode: null, self: '', members: [],
+      inRoom: false, rejoining: false, reconnectDelay: 1000,
+      typers: new Map(), // name -> 自動清除計時器 id
+      lastSender: null, // 連續訊息分組用
+      isHost: false, locked: false, capacity: 5,
+    };
+
+    // ---- 連線位址：依當前協議自動切 ws/wss（本機 ws、線上 wss）----
+    const wsURL = () => {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${proto}//${location.host}`;
+    };
+
+    const banner = (text, warn = false) => {
+      els.banner.textContent = text;
+      els.banner.className = 'banner show' + (warn ? ' warn' : '');
+      clearTimeout(banner._t);
+      banner._t = setTimeout(() => { els.banner.className = 'banner'; }, 2600);
+    };
+
+    const send = (type, payload = {}) => {
+      if (state.connected) state.ws.send(JSON.stringify({ type, ...payload }));
+    };
+
+    const addSystem = (text) => {
+      state.lastSender = null; // 系統訊息打斷連續分組
+      const el = document.createElement('div');
+      el.className = 'sys'; el.textContent = text;
+      els.messages.appendChild(el); scrollDown();
+    };
+    // 依暱稱字串穩定產生一個顏色，讓同一人氣泡標題顏色固定
+    const colorFor = (name) => {
+      let h = 0;
+      for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+      return `hsl(${h} 52% 48%)`;
+    };
+
+    const fmtTime = (ts) => {
+      const d = new Date(ts);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+
+    const addMessage = (text, mine, name, ts) => {
+      const continued = name === state.lastSender; // 同一人連發 → 收緊、不重複名字
+      state.lastSender = name;
+
+      const row = document.createElement('div');
+      row.className = 'row ' + (mine ? 'me' : 'peer') + (continued ? ' cont' : '');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble'; bubble.textContent = text;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = fmtTime(ts);
+      if (mine) {
+        const sent = document.createElement('span'); // 已送出到伺服器（非已讀）
+        sent.className = 'sent'; sent.textContent = ' ✓';
+        meta.appendChild(sent);
+        row.append(meta, bubble);
+      } else {
+        const stack = document.createElement('div');
+        stack.className = 'stack';
+        if (!continued) {
+          const sender = document.createElement('div');
+          sender.className = 'sender'; sender.textContent = name;
+          sender.style.color = colorFor(name);
+          stack.appendChild(sender);
+        }
+        stack.appendChild(bubble);
+        row.append(stack, meta);
+      }
+      els.messages.appendChild(row); scrollDown();
+    };
+    const scrollDown = () => { els.messages.scrollTop = els.messages.scrollHeight; };
+
+    const setStatus = (online, text) => {
+      els.topbar.classList.toggle('online', online);
+      els.statusText.textContent = text;
+    };
+
+    const renderLock = () => {
+      els.lockBtn.classList.toggle('show', state.isHost);
+      els.lockBtn.classList.toggle('locked', state.locked);
+      els.lockBtn.textContent = state.locked ? '已鎖定' : '鎖定房間';
+    };
+
+    const updateRoster = ({ members, capacity, locked } = {}) => {
+      if (Array.isArray(members)) state.members = members;
+      if (typeof capacity === 'number') state.capacity = capacity;
+      if (typeof locked === 'boolean') state.locked = locked;
+      const n = state.members.length;
+      const lockTag = state.locked ? ' · 已鎖定' : '';
+      const text = n > 1
+        ? `房內 ${n}/${state.capacity} 人 · ${state.members.join('、')}${lockTag}`
+        : `等待其他人加入…（1/${state.capacity}）${lockTag}`;
+      setStatus(n > 1, text);
+      renderLock();
+    };
+
+    const renderTyping = () => {
+      const names = [...state.typers.keys()];
+      els.typing.textContent = names.length ? `${names.join('、')} 正在輸入…` : '';
+    };
+
+    // localStorage 不可用（隱私模式等）時靜默降級，不影響聊天功能
+    const remember = (key, value) => {
+      try { localStorage.setItem(`chatroom:${key}`, value || ''); } catch { /* ignore */ }
+    };
+    const recall = (key) => {
+      try { return localStorage.getItem(`chatroom:${key}`) || ''; } catch { return ''; }
+    };
+
+    const enterChat = (code) => {
+      state.roomCode = code;
+      state.inRoom = true;
+      els.roomCode.textContent = code;
+      els.lobby.style.display = 'none';
+      els.chat.classList.add('active');
+      remember('room', code);
+      remember('name', state.self);
+    };
+
+    // ---- 訊息處理 ----
+    const dropTyper = (name) => {
+      clearTimeout(state.typers.get(name));
+      state.typers.delete(name);
+    };
+
+    // ---- 上方彈幕渲染（來自 web_danmaku 的抖音直播彈幕）----
+    const DANMAKU_TAG = { gift: '禮物', member: '進場', social: '關注', like: '讚', chat: '' };
+    let danmakuStarted = false;
+    const addDanmaku = ({ dtype, name, text }) => {
+      if (!danmakuStarted) { els.danmakuList.innerHTML = ''; danmakuStarted = true; }
+      const row = document.createElement('div');
+      row.className = 'drow d-' + (dtype || 'chat');
+      const who = document.createElement('span');
+      who.className = 'dname'; who.textContent = name || '';
+      const tag = DANMAKU_TAG[dtype];
+      const body = document.createElement('span');
+      body.textContent = (tag ? `[${tag}] ` : '') + (text || '');
+      row.append(who, body);
+      els.danmakuList.appendChild(row);
+      while (els.danmakuList.children.length > 300) els.danmakuList.removeChild(els.danmakuList.firstChild);
+      els.danmakuList.scrollTop = els.danmakuList.scrollHeight;
+    };
+
+    const handlers = {
+      room_created: ({ code, self, members, capacity, locked, isHost }) => {
+        state.self = self; state.isHost = Boolean(isHost);
+        enterChat(code); updateRoster({ members, capacity, locked });
+        if (!state.rejoining) banner('房間已建立，把房號告訴朋友');
+        state.rejoining = false;
+      },
+      joined: ({ code, self, members, capacity, locked, isHost }) => {
+        state.self = self; state.isHost = Boolean(isHost);
+        enterChat(code); updateRoster({ members, capacity, locked });
+        const others = members.filter((m) => m !== self);
+        addSystem(others.length ? `你已加入，房內：${others.join('、')}` : '你已加入，目前只有你');
+        state.rejoining = false;
+      },
+      peer_joined: ({ name, members, capacity, locked }) => { updateRoster({ members, capacity, locked }); addSystem(`${name} 加入了`); },
+      peer_left: ({ name, members, capacity, locked }) => { dropTyper(name); renderTyping(); updateRoster({ members, capacity, locked }); addSystem(`${name} 離開了`); },
+      host_changed: ({ isHost }) => { state.isHost = Boolean(isHost); renderLock(); addSystem('你成為新房主'); },
+      lock_changed: ({ locked, by }) => { updateRoster({ locked }); addSystem(locked ? `${by} 鎖定了房間` : `${by} 解除了鎖定`); },
+      message: ({ name, text, ts }) => { dropTyper(name); renderTyping(); addMessage(text, false, name, ts); },
+      danmaku: (d) => addDanmaku(d),
+      typing: ({ name, isTyping }) => {
+        if (isTyping) {
+          clearTimeout(state.typers.get(name));
+          state.typers.set(name, setTimeout(() => { state.typers.delete(name); renderTyping(); }, 3000));
+        } else {
+          dropTyper(name);
+        }
+        renderTyping();
+      },
+      error: ({ reason }) => {
+        const msg = reason === 'room_full' ? '房間已滿，無法加入'
+          : reason === 'room_locked' ? '房間已鎖定，無法加入'
+          : reason === 'invalid_code' ? '房號格式錯誤，需 6 位英數' : '發生錯誤';
+        banner(msg, true);
+        els.joinBtn.disabled = false; els.createBtn.disabled = false;
+      },
+    };
+
+    // ---- WebSocket 連線 + 自動重連（中國長連線易被切）----
+    const connect = () => {
+      const ws = new WebSocket(wsURL());
+      state.ws = ws;
+
+      ws.onopen = () => {
+        state.connected = true; state.reconnectDelay = 1000;
+        els.lobbyHint.textContent = '已就緒，建立或進入房號';
+        els.createBtn.disabled = false; els.joinBtn.disabled = false;
+        // 斷線重連後，用 enter 重建/重進原房間（伺服器重啟也能恢復），沿用原暱稱與容量
+        if (state.roomCode) {
+          state.rejoining = true;
+          send('enter', { code: state.roomCode, name: state.self, capacity: state.capacity });
+          banner('已重新連線');
+        }
+      };
+
+      ws.onmessage = (e) => {
+        let data; try { data = JSON.parse(e.data); } catch { return; }
+        const fn = handlers[data.type];
+        if (fn) fn(data);
+      };
+
+      ws.onclose = () => {
+        state.connected = false;
+        if (state.inRoom) setStatus(false, '連線中斷，重連中…');
+        else els.lobbyHint.textContent = '連線中斷，重連中…';
+        // 指數退避重連，上限 8 秒
+        setTimeout(connect, state.reconnectDelay);
+        state.reconnectDelay = Math.min(state.reconnectDelay * 2, 8000);
+      };
+
+      ws.onerror = () => ws.close();
+    };
+
+    // ---- 互動 ----
+    const nameValue = () => els.nameInput.value.trim();
+    const capValue = () => Number(els.capSelect.value);
+    els.createBtn.onclick = () => { els.createBtn.disabled = true; send('create', { name: nameValue(), capacity: capValue() }); };
+    els.joinBtn.onclick = () => {
+      const code = els.codeInput.value.trim().toUpperCase();
+      if (!/^[A-Z0-9]{6}$/.test(code)) { banner('請輸入 6 位英數房號', true); return; }
+      els.joinBtn.disabled = true; send('enter', { code, name: nameValue(), capacity: capValue() });
+    };
+    els.codeInput.oninput = () => { els.codeInput.value = els.codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); };
+    els.capSelect.onchange = () => remember('capacity', els.capSelect.value);
+    els.lockBtn.onclick = () => { if (state.isHost) send('set_lock', { locked: !state.locked }); };
+
+    // ---- 深色模式 ----
+    const applyTheme = (dark) => {
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      els.darkToggle.checked = dark;
+      remember('theme', dark ? 'dark' : 'light');
+    };
+    els.darkToggle.onchange = () => applyTheme(els.darkToggle.checked);
+
+    const autoGrow = () => { els.msgInput.style.height = 'auto'; els.msgInput.style.height = els.msgInput.scrollHeight + 'px'; };
+    let typingTimer = null;
+    els.msgInput.oninput = () => {
+      autoGrow();
+      els.sendBtn.disabled = !state.inRoom || !els.msgInput.value.trim();
+      if (!state.inRoom) return;
+      send('typing', { isTyping: true });
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => send('typing', { isTyping: false }), 1200);
+    };
+
+    const sendMessage = () => {
+      const text = els.msgInput.value.trim();
+      if (!text || !state.inRoom) return;
+      send('message', { text });
+      addMessage(text, true, state.self, Date.now());
+      els.msgInput.value = ''; autoGrow(); els.sendBtn.disabled = true;
+      send('typing', { isTyping: false });
+    };
+    els.sendBtn.onclick = sendMessage;
+    els.msgInput.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    };
+
+    // ---- 拖拉調整「彈幕 / 對話」占比 ----
+    let dragging = false;
+    const applyDanmakuHeight = (px) => {
+      const room = els.chat.clientHeight - 150; // 預留對話與輸入框空間
+      const h = Math.max(56, Math.min(room > 56 ? room : 56, px));
+      els.danmakuPane.style.flexBasis = h + 'px';
+    };
+    els.resizer.addEventListener('pointerdown', (e) => {
+      dragging = true; els.resizer.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    els.resizer.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      applyDanmakuHeight(e.clientY - els.danmakuPane.getBoundingClientRect().top);
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { els.resizer.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      remember('danmakuH', String(Math.round(parseFloat(els.danmakuPane.style.flexBasis) || 0)));
+    };
+    els.resizer.addEventListener('pointerup', endDrag);
+    els.resizer.addEventListener('pointercancel', endDrag);
+
+    // ---- 載入時還原設定與輸入 ----
+    applyTheme(recall('theme') === 'dark');
+    const savedCap = recall('capacity');
+    if (savedCap) els.capSelect.value = savedCap;
+    els.nameInput.value = recall('name');
+    const fromURL = new URLSearchParams(location.search).get('room');
+    els.codeInput.value = (fromURL || recall('room')).toUpperCase().slice(0, 6);
+
+    // 彈幕區初始提示 + 還原上次拖拉的高度
+    els.danmakuList.innerHTML = '<div class="danmaku-empty">等待直播彈幕…（由抖音直播間即時推送）</div>';
+    const savedH = recall('danmakuH');
+    if (savedH) els.danmakuPane.style.flexBasis = savedH + 'px';
+
+    connect();
+  </script>
+</body>
+</html>

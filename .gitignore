@@ -1,9 +1,16 @@
 node_modules/
 __pycache__/
 dist/
-package.json
-package-lock.json
+/package.json
+/package-lock.json
 .idea
 .venv
+venv/
 .DS_Store
 *.pyc
+
+# 整合新增：不推大型 / 敏感 / 個人資料
+ui_password.txt
+.env
+stats/
+rooms.json
