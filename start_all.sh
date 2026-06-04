@@ -18,6 +18,29 @@ c_ok(){ printf '\033[32m%s\033[0m\n' "$*"; }
 c_warn(){ printf '\033[33m%s\033[0m\n' "$*"; }
 c_err(){ printf '\033[31m%s\033[0m\n' "$*"; }
 
+# ---------- 版本 + 自動更新 ----------
+VERSION="$(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
+c_say "整合聊天室 v$VERSION"
+if [ -z "${DY_SELF_UPDATED:-}" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "    檢查更新…"
+  git -C "$ROOT" fetch --quiet 2>/dev/null || true
+  LOCAL="$(git -C "$ROOT" rev-parse @ 2>/dev/null || true)"
+  REMOTE="$(git -C "$ROOT" rev-parse '@{u}' 2>/dev/null || true)"
+  BASE="$(git -C "$ROOT" merge-base @ '@{u}' 2>/dev/null || true)"
+  if [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ] && [ "$LOCAL" = "$BASE" ]; then
+    c_warn "    發現新版本，自動更新中 (git pull)…"
+    if git -C "$ROOT" pull --ff-only --quiet 2>/dev/null; then
+      c_ok "    ✅ 已更新到最新版，以新版重新啟動"
+      export DY_SELF_UPDATED=1
+      exec "$0" "$@"
+    else
+      c_warn "    ⚠ 自動更新失敗（本地可能有改動），改用當前版本繼續。可手動： git stash && git pull"
+    fi
+  elif [ -n "$REMOTE" ]; then
+    c_ok "    已是最新版"
+  fi
+fi
+
 # ---------- [1/5] 基礎工具 ----------
 c_say "==> [1/5] 檢測 Python / Node / cloudflared"
 PY="$(command -v python3 || true)"

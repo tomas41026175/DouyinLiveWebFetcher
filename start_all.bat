@@ -13,6 +13,34 @@ set "CF_LOG=.cf_tunnel.log"
 set "CHAT_URL_FILE=chatroom_url.txt"
 set "ROOM=123456"
 
+REM ---------- 版本 + 自動更新 ----------
+set "VERSION=unknown"
+if exist "VERSION" set /p VERSION=<VERSION
+echo 整合聊天室 v%VERSION%
+if not defined DY_SELF_UPDATED (
+  git rev-parse --git-dir >nul 2>nul
+  if not errorlevel 1 (
+    echo     檢查更新...
+    git fetch --quiet 2>nul
+    set "LOCAL=" & set "REMOTE=" & set "BASE="
+    for /f %%h in ('git rev-parse @ 2^>nul') do set "LOCAL=%%h"
+    for /f %%h in ('git rev-parse "@{u}" 2^>nul') do set "REMOTE=%%h"
+    for /f %%h in ('git merge-base @ "@{u}" 2^>nul') do set "BASE=%%h"
+    if defined REMOTE if not "!LOCAL!"=="!REMOTE!" if "!LOCAL!"=="!BASE!" (
+      echo     發現新版本，自動更新中 ^(git pull^)...
+      git pull --ff-only --quiet 2>nul
+      if not errorlevel 1 (
+        echo     已更新到最新版，以新版重新啟動
+        set "DY_SELF_UPDATED=1"
+        call "%~f0" %*
+        exit /b
+      ) else (
+        echo     [警告] 自動更新失敗（本地可能有改動），改用當前版本繼續
+      )
+    )
+  )
+)
+
 echo ==^> [1/5] 檢測 Python / Node / cloudflared
 where python >nul 2>nul || (echo [錯誤] 找不到 python，請安裝 Python 3.x 並加入 PATH & pause & exit /b 1)
 where node   >nul 2>nul || (echo [錯誤] 找不到 node，請安裝 Node.js 18+ & pause & exit /b 1)
