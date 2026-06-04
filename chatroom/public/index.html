@@ -319,7 +319,7 @@
 
     const state = {
       ws: null, connected: false, roomCode: null, self: '', members: [],
-      inRoom: false, rejoining: false, reconnectDelay: 1000,
+      inRoom: false, rejoining: false, reconnectDelay: 1000, autoJoin: null,
       typers: new Map(), // name -> 自動清除計時器 id
       lastSender: null, // 連續訊息分組用
       isHost: false, locked: false, capacity: 5,
@@ -517,6 +517,10 @@
           state.rejoining = true;
           send('enter', { code: state.roomCode, name: state.self, capacity: state.capacity });
           banner('已重新連線');
+        } else if (state.autoJoin) {
+          // 網址帶 ?room= → 連線後自動進房（不需手動輸入）
+          send('enter', { code: state.autoJoin, name: nameValue(), capacity: capValue() });
+          state.autoJoin = null;
         }
       };
 
@@ -611,8 +615,10 @@
     const savedCap = recall('capacity');
     if (savedCap) els.capSelect.value = savedCap;
     els.nameInput.value = recall('name');
-    const fromURL = new URLSearchParams(location.search).get('room');
-    els.codeInput.value = (fromURL || recall('room')).toUpperCase().slice(0, 6);
+    const fromURL = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 6);
+    els.codeInput.value = fromURL || recall('room').toUpperCase().slice(0, 6);
+    // 網址帶有效房號 → 連線後自動進房
+    if (/^[A-Z0-9]{6}$/.test(fromURL)) state.autoJoin = fromURL;
 
     // 彈幕區初始提示 + 還原上次拖拉的高度
     els.danmakuList.innerHTML = '<div class="danmaku-empty">等待直播彈幕…（由抖音直播間即時推送）</div>';

@@ -11,6 +11,7 @@ DANMAKU_PORT=8765
 CHAT_PORT=3000
 CF_LOG="$ROOT/.cf_tunnel.log"
 CHAT_URL_FILE="$ROOT/chatroom_url.txt"
+ROOM=123456   # 啟動後聊天室自動進入的固定房號
 
 c_say(){ printf '\033[36m%s\033[0m\n' "$*"; }
 c_ok(){ printf '\033[32m%s\033[0m\n' "$*"; }
@@ -97,4 +98,13 @@ echo  "  抖音弹幕 webUI（本機自己看）: http://127.0.0.1:$DANMAKU_PORT
 echo  ""
 echo  "  Ctrl+C 結束所有服務（含隧道）"
 echo "============================================================"
+
+# 自動開啟兩個網址：抖音 webUI + 聊天室（直接進房號 $ROOM）
+open "http://127.0.0.1:$DANMAKU_PORT/" >/dev/null 2>&1 || true
+if [ -n "$PUBLIC_URL" ]; then
+  open "$PUBLIC_URL/?room=$ROOM" >/dev/null 2>&1 || true
+else
+  open "http://localhost:$CHAT_PORT/?room=$ROOM" >/dev/null 2>&1 || true
+fi
+
 wait

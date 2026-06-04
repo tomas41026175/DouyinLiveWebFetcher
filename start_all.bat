@@ -11,6 +11,7 @@ set "DANMAKU_PORT=8765"
 set "CHAT_PORT=3000"
 set "CF_LOG=.cf_tunnel.log"
 set "CHAT_URL_FILE=chatroom_url.txt"
+set "ROOM=123456"
 
 echo ==^> [1/5] 檢測 Python / Node / cloudflared
 where python >nul 2>nul || (echo [錯誤] 找不到 python，請安裝 Python 3.x 並加入 PATH & pause & exit /b 1)
@@ -86,5 +87,14 @@ echo   抖音弹幕 webUI（本機自己看^): http://127.0.0.1:%DANMAKU_PORT%  
 echo.
 echo   關閉彈出的三個視窗即可停止對應服務
 echo ============================================================
+
+REM 自動開啟兩個網址：抖音 webUI + 聊天室（直接進房號 %ROOM%）
+start "" "http://127.0.0.1:%DANMAKU_PORT%/"
+if defined PUBLIC_URL (
+  start "" "!PUBLIC_URL!/?room=%ROOM%"
+) else (
+  start "" "http://localhost:%CHAT_PORT%/?room=%ROOM%"
+)
+
 pause
 endlocal
