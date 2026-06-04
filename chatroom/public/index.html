@@ -190,7 +190,8 @@
     .hl-input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
     .danmaku-list { flex: 1; overflow-y: auto; padding: 8px 12px; -webkit-overflow-scrolling: touch; }
     .drow { padding: 2px 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
-    .drow.hl { background: rgba(192,103,59,.20); border-radius: 6px; padding: 3px 6px; }
+    .drow.hl { background: var(--hl-color, rgba(192,103,59,.20)); border-radius: 6px; padding: 3px 6px; }
+    .hl-color { flex: none; width: 30px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; }
     .drow .dname { font-weight: 600; margin-right: 6px; }
     .drow .dtag { font-size: 11px; color: var(--ink-soft); margin-right: 4px; }
     .d-chat .dname { color: #4f93d6; }
@@ -296,6 +297,7 @@
       <div class="danmaku-head">
         <span>直播彈幕</span><span class="dhint" id="danmakuHint"></span>
         <input class="hl-input" id="hlInput" placeholder="高亮關鍵字（逗號分隔）" autocomplete="off" />
+        <input class="hl-color" id="hlColor" type="color" value="#c0673b" title="高亮顏色" />
       </div>
       <div class="danmaku-list" id="danmakuList"></div>
     </div>
@@ -325,7 +327,7 @@
       messages: $('messages'), typing: $('typingIndicator'),
       msgInput: $('msgInput'), sendBtn: $('sendBtn'), banner: $('banner'),
       danmakuPane: $('danmakuPane'), danmakuList: $('danmakuList'),
-      danmakuHint: $('danmakuHint'), resizer: $('resizer'), hlInput: $('hlInput'),
+      danmakuHint: $('danmakuHint'), resizer: $('resizer'), hlInput: $('hlInput'), hlColor: $('hlColor'),
     };
 
     const state = {
@@ -650,6 +652,15 @@
     const savedH = recall('danmakuH');
     if (savedH) els.danmakuPane.style.flexBasis = savedH + 'px';
 
+    const hexToRgba = (hex, a) => {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    const applyHlColor = (hex) => document.documentElement.style.setProperty('--hl-color', hexToRgba(hex, 0.28));
+    els.hlColor.value = recall('hlcolor') || '#c0673b';
+    applyHlColor(els.hlColor.value);
+    els.hlColor.oninput = () => { remember('hlcolor', els.hlColor.value); applyHlColor(els.hlColor.value); };
     els.hlInput.value = recall('hlkw');
     applyHighlightKw(els.hlInput.value);
     els.hlInput.oninput = () => { remember('hlkw', els.hlInput.value); applyHighlightKw(els.hlInput.value); };

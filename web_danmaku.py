@@ -779,8 +779,9 @@ PAGE = r"""<!DOCTYPE html>
   .stat-n { color:#ffcf66; white-space:nowrap; }
   .stat-empty { color:#6b7280; padding:4px 2px; font-size:13px; }
   footer { padding:6px 14px; font-size:12px; color:#6b7280; background:#171a21; border-top:1px solid #262a33; }
-  .row.hl{ background:rgba(245,190,50,.22)!important; box-shadow:inset 3px 0 0 #f0b400; }
+  .row.hl{ background:var(--hl-color,rgba(245,190,50,.22))!important; box-shadow:inset 3px 0 0 var(--hl-edge,#f0b400); }
   #hlInput{ background:#10131a; color:#e6e6e6; border:1px solid #2a2f3a; border-radius:6px; padding:5px 8px; font-size:13px; }
+  #hlColor{ width:30px; height:28px; padding:0; border:1px solid #2a2f3a; border-radius:6px; background:#10131a; cursor:pointer; vertical-align:middle; }
 </style>
 </head>
 <body>
@@ -815,6 +816,7 @@ PAGE = r"""<!DOCTYPE html>
     <option value="reset">重置本房间布局</option>
   </select>
   <input id="hlInput" placeholder="高亮關鍵字（逗號分隔）" style="width:150px;" autocomplete="off" />
+  <input id="hlColor" type="color" value="#f0b400" title="高亮顏色" />
   <button class="ghost" id="addBtn">＋ 添加窗口</button>
 </header>
 <div id="board"></div>
@@ -1208,6 +1210,12 @@ PAGE = r"""<!DOCTYPE html>
       try { localStorage.setItem('dy_highlight', hi.value); } catch(e){}
       rescanHL();
     });
+    var hc = document.getElementById('hlColor');
+    function hexToRgba(hex, a){ var h = hex.replace('#',''); return 'rgba('+parseInt(h.slice(0,2),16)+','+parseInt(h.slice(2,4),16)+','+parseInt(h.slice(4,6),16)+','+a+')'; }
+    function applyHlColor(hex){ var s = document.documentElement.style; s.setProperty('--hl-color', hexToRgba(hex, 0.28)); s.setProperty('--hl-edge', hex); }
+    try { var sv = localStorage.getItem('dy_hlcolor'); if (sv) hc.value = sv; } catch(e){}
+    applyHlColor(hc.value);
+    hc.addEventListener('input', function(){ try { localStorage.setItem('dy_hlcolor', hc.value); } catch(e){} applyHlColor(hc.value); });
   })();
 
   document.getElementById('layoutMenu').addEventListener('change', function(e){
