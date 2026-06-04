@@ -27,7 +27,7 @@ start_all.bat         # Windows（直接雙擊亦可）
 
 每次啟動會 `git fetch` 比對遠端，**發現新版自動 `git pull --ff-only` 並以新版重啟**（需以 git clone 部署；本地若有改動則跳過不強制）。
 
-> 完整整合說明（架構、雙向資料流、注意事項）見 **[INTEGRATION.md](./INTEGRATION.md)**。
+> 完整整合說明（架構、雙向資料流、注意事項）見 **[docs/INTEGRATION.md](./docs/INTEGRATION.md)**。
 > 環境需求 `mini_racer` 等已在 Python 3.14 + Apple Silicon 實測可裝。
 
 ---

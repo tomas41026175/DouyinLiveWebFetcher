@@ -9,9 +9,8 @@ venv/
 .DS_Store
 *.pyc
 
-# 整合新增：不推大型 / 敏感 / 個人 / 執行期產物
-ui_password.txt
-.env
+# 整合新增：不推大型 / 執行期產物
+# （private repo，故 LIVE_ID 的 .env 與密碼 ui_password.txt 允許入庫）
 stats/
 rooms.json
 chatroom_url.txt
