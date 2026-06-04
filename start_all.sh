@@ -32,7 +32,7 @@ if [ -z "${DY_SELF_UPDATED:-}" ] && git -C "$ROOT" rev-parse --git-dir >/dev/nul
     if git -C "$ROOT" pull --ff-only --quiet 2>/dev/null; then
       c_ok "    ✅ 已更新到最新版，以新版重新啟動"
       export DY_SELF_UPDATED=1
-      exec "$0" "$@"
+      exec bash "$0" "$@"   # 用 bash 重跑，不依賴 +x（clone 後首次可能無執行權限）
     else
       c_warn "    ⚠ 自動更新失敗（本地可能有改動），改用當前版本繼續。可手動： git stash && git pull"
     fi
