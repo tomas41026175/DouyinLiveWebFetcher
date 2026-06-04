@@ -6,8 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "stickers:rename": "node scripts/rename-stickers.mjs"
+    "dev": "node server.js"
   },
   "engines": {
     "node": ">=18"

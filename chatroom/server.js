@@ -1,13 +1,11 @@
 import { createServer, get as httpGet } from 'node:http';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
-const STICKERS_DIR = fileURLToPath(new URL('./stickers', import.meta.url)); // 貼圖資料夾（本機放圖）
-const STICKER_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 const ROOM_CODE_LENGTH = 6;
 const DEFAULT_CAPACITY = 5;
 const MIN_CAPACITY = 2;
@@ -22,11 +20,6 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.ico': 'image/x-icon',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
 };
 
 // rooms: Map<roomCode, { members: Set<WebSocket>, capacity: number, locked: boolean, host: WebSocket }>
@@ -166,17 +159,13 @@ const handleSetLock = (socket, locked) => {
 // DANMAKU_URL 為空（獨立啟動）時不轉發；web_danmaku 未啟動時靜默略過，不影響聊天
 const DANMAKU_URL = process.env.DANMAKU_URL || '';
 const DANMAKU_PASSWORD = process.env.DANMAKU_PASSWORD || '';
-const postIngest = (body) => {
+const forwardToDanmaku = (room, name, text) => {
   if (!DANMAKU_URL) return;
   const headers = { 'Content-Type': 'application/json' };
   if (DANMAKU_PASSWORD) headers.Authorization = 'Basic ' + Buffer.from(`:${DANMAKU_PASSWORD}`).toString('base64');
-  fetch(`${DANMAKU_URL}/chat/ingest`, { method: 'POST', headers, body: JSON.stringify(body) })
+  fetch(`${DANMAKU_URL}/chat/ingest`, { method: 'POST', headers, body: JSON.stringify({ room, name, text }) })
     .catch(() => { /* web_danmaku 未啟動或斷線時靜默略過 */ });
 };
-const forwardToDanmaku = (room, name, text) => postIngest({ room, name, text });
-// 貼圖鏡像：webUI 與 chatroom 同機，圖片用 127.0.0.1:<PORT>/stickers/ 載入
-const forwardSticker = (room, name, stickerName) =>
-  postIngest({ room, name, text: '[貼圖]', sticker_url: `http://127.0.0.1:${PORT}/stickers/${encodeURIComponent(stickerName)}` });
 
 const handleMessage = (socket, text) => {
   const content = String(text || '').slice(0, 4000);
@@ -186,29 +175,6 @@ const handleMessage = (socket, text) => {
   peersOf(socket).forEach((peer) => send(peer, 'message', { name: socket.name, text: content, ts }));
   // 同時鏡像到抖音 webUI 的「聊天室」視窗
   forwardToDanmaku(socket.roomCode, socket.name, content);
-};
-
-// 列出 stickers 目錄內的貼圖檔（natural sort，與前端面板 / 重命名工具順序一致）
-const listStickers = async () => {
-  try {
-    const files = await readdir(STICKERS_DIR);
-    return files
-      .filter((name) => STICKER_EXTS.has(extname(name).toLowerCase()))
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  } catch {
-    return [];
-  }
-};
-
-// 貼圖訊息：白名單驗證（必須是 stickers 目錄實際檔案）後廣播 + 鏡像 webUI
-const handleSticker = async (socket, name) => {
-  if (!socket.roomCode) return;
-  const safeName = String(name || '');
-  const stickers = await listStickers();
-  if (!stickers.includes(safeName)) return; // 防注入 / 路徑穿越
-  const ts = Date.now();
-  peersOf(socket).forEach((peer) => send(peer, 'sticker', { name: safeName, sender: socket.name, ts }));
-  forwardSticker(socket.roomCode, socket.name, safeName);
 };
 
 const handleTyping = (socket, isTyping) => {
@@ -232,8 +198,6 @@ const handleClientMessage = (socket, raw) => {
       return handleSetLock(socket, data.locked);
     case 'message':
       return handleMessage(socket, data.text);
-    case 'sticker':
-      return handleSticker(socket, data.name);
     case 'typing':
       return handleTyping(socket, data.isTyping);
     default:
@@ -261,34 +225,7 @@ const serveStatic = async (req, res) => {
   }
 };
 
-// ---- 貼圖：清單 + 靜態檔（副檔名白名單 + 目錄穿越防護）----
-const serveStickerList = async (res) => {
-  const stickers = await listStickers();
-  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ stickers }));
-};
-
-const serveSticker = async (pathname, res) => {
-  const name = pathname.slice('/stickers/'.length); // pathname 已在路由處 decode
-  const resolved = normalize(join(STICKERS_DIR, name));
-  if (!resolved.startsWith(STICKERS_DIR) || !STICKER_EXTS.has(extname(resolved).toLowerCase())) {
-    res.writeHead(403).end('Forbidden');
-    return;
-  }
-  try {
-    const file = await readFile(resolved);
-    const mime = MIME_TYPES[extname(resolved).toLowerCase()] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime }).end(file);
-  } catch {
-    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
-  }
-};
-
-const httpServer = createServer((req, res) => {
-  const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
-  if (pathname === '/stickers') return serveStickerList(res);
-  if (pathname.startsWith('/stickers/')) return serveSticker(pathname, res);
-  return serveStatic(req, res);
-});
+const httpServer = createServer(serveStatic);
 const wss = new WebSocketServer({ server: httpServer });
 
 wss.on('connection', (socket) => {

@@ -771,7 +771,6 @@ PAGE = r"""<!DOCTYPE html>
   .member{ background:#14201a; color:#8fe3b0; font-size:0.94em; }
   .social{ background:#201826; color:#e3a0ff; font-size:0.94em; }
   .system{ background:#1d2330; color:#9aa0ad; font-size:0.9em; text-align:center; }
-  .dy-sticker { display:block; max-width:120px; max-height:120px; margin-top:4px; border-radius:6px; }
   .stat-ctrl { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
   .stat-sum { background:#1b2230; border-radius:6px; padding:6px 8px; margin-bottom:6px; font-size:13px; }
   .stat-sum b { color:#ffcf66; }
@@ -906,17 +905,8 @@ PAGE = r"""<!DOCTYPE html>
     row.className = 'row ' + ev.type;
     if (ev.type === 'system'){ row.textContent = ev.text; return row; }
     const pre = labels[ev.type] || '';
-    const nameHtml = '<span class="name">'+escapeHtml(pre+ev.name)+'</span>';
-    if (ev.sticker_url){
-      // 貼圖：用 DOM 設定 img.src（不經 innerHTML 拼接），避免屬性注入
-      row.innerHTML = nameHtml + '<span></span>';
-      const img = document.createElement('img');
-      img.className = 'dy-sticker'; img.alt = '貼圖'; img.src = ev.sticker_url;
-      row.lastChild.appendChild(img);
-    } else {
-      row.innerHTML = nameHtml +
-        '<span>'+(ev.type==='chat'?'：':'')+escapeHtml(ev.text||'')+'</span>';
-    }
+    row.innerHTML = '<span class="name">'+escapeHtml(pre+ev.name)+'</span>'+
+                    '<span>'+(ev.type==='chat'?'：':'')+escapeHtml(ev.text||'')+'</span>';
     if (hlMatch(ev)) row.classList.add('hl');
     return row;
   }
@@ -1379,12 +1369,7 @@ class Handler(BaseHTTPRequestHandler):
             if ev_type not in ("roomchat", "chat", "gift", "member", "social", "like"):
                 ev_type = "roomchat"
             label = f"[{room}] {name}" if room else name
-            ev = {"type": ev_type, "name": label, "text": text}
-            # 貼圖：僅接受本機 chatroom 的貼圖 URL，避免任意外部 URL 注入 webUI
-            sticker_url = str(data.get("sticker_url", "")).strip()
-            if re.match(r'^http://127\.0\.0\.1:\d+/stickers/', sticker_url):
-                ev["sticker_url"] = sticker_url[:500]
-            broadcast(ev)
+            broadcast({"type": ev_type, "name": label, "text": text})
             self._send(json.dumps({"ok": True}), "application/json; charset=utf-8")
             return
 
