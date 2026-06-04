@@ -779,6 +779,8 @@ PAGE = r"""<!DOCTYPE html>
   .stat-n { color:#ffcf66; white-space:nowrap; }
   .stat-empty { color:#6b7280; padding:4px 2px; font-size:13px; }
   footer { padding:6px 14px; font-size:12px; color:#6b7280; background:#171a21; border-top:1px solid #262a33; }
+  .row.hl{ background:rgba(245,190,50,.22)!important; box-shadow:inset 3px 0 0 #f0b400; }
+  #hlInput{ background:#10131a; color:#e6e6e6; border:1px solid #2a2f3a; border-radius:6px; padding:5px 8px; font-size:13px; }
 </style>
 </head>
 <body>
@@ -812,6 +814,7 @@ PAGE = r"""<!DOCTYPE html>
     <option value="tpl_apply">套用默认模板到本房间</option>
     <option value="reset">重置本房间布局</option>
   </select>
+  <input id="hlInput" placeholder="高亮關鍵字（逗號分隔）" style="width:150px;" autocomplete="off" />
   <button class="ghost" id="addBtn">＋ 添加窗口</button>
 </header>
 <div id="board"></div>
@@ -845,6 +848,8 @@ PAGE = r"""<!DOCTYPE html>
   try { const f = parseInt(localStorage.getItem('dy_fs')); if (f) fontSize = f; } catch(e){}
   let orient = 'h';
   try { const o = localStorage.getItem('dy_orient'); if (o === 'v' || o === 'h') orient = o; } catch(e){}
+  let HL = [];
+  try { const h = localStorage.getItem('dy_highlight'); if (h) HL = h.split(/[\s,，、]+/).filter(Boolean); } catch(e){}
 
   function applyPanelSize(p){
     if (orient === 'v'){ p.el.style.width = ''; p.el.style.height = p.height + 'px'; }
@@ -887,6 +892,12 @@ PAGE = r"""<!DOCTYPE html>
     return applyExclude(p, ev);
   }
 
+  function hlMatch(ev){
+    if (!HL.length) return false;
+    var hay = (ev.name||'') + ' ' + (ev.text||'');
+    for (var i=0;i<HL.length;i++){ if (HL[i] && hay.indexOf(HL[i]) !== -1) return true; }
+    return false;
+  }
   function makeRow(ev){
     const row = document.createElement('div');
     row.className = 'row ' + ev.type;
@@ -894,7 +905,16 @@ PAGE = r"""<!DOCTYPE html>
     const pre = labels[ev.type] || '';
     row.innerHTML = '<span class="name">'+escapeHtml(pre+ev.name)+'</span>'+
                     '<span>'+(ev.type==='chat'?'：':'')+escapeHtml(ev.text||'')+'</span>';
+    if (hlMatch(ev)) row.classList.add('hl');
     return row;
+  }
+  function rescanHL(){
+    document.querySelectorAll('#board .row').forEach(function(row){
+      if (row.classList.contains('system')) return;
+      var hit = false;
+      for (var i=0;i<HL.length;i++){ if (HL[i] && row.textContent.indexOf(HL[i]) !== -1){ hit = true; break; } }
+      row.classList.toggle('hl', hit);
+    });
   }
 
   function appendTo(p, ev){
@@ -1180,6 +1200,15 @@ PAGE = r"""<!DOCTYPE html>
   document.getElementById('roomInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doSwitch(); });
   document.getElementById('noteInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doSwitch(); });
   document.getElementById('addBtn').addEventListener('click', function(){ addPanel({type:'all',kw:''}); });
+  (function(){
+    var hi = document.getElementById('hlInput');
+    hi.value = HL.join(' ');
+    hi.addEventListener('input', function(){
+      HL = hi.value.split(/[\s,，、]+/).filter(Boolean);
+      try { localStorage.setItem('dy_highlight', hi.value); } catch(e){}
+      rescanHL();
+    });
+  })();
 
   document.getElementById('layoutMenu').addEventListener('change', function(e){
     const v = e.target.value;
