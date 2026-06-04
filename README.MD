@@ -1,6 +1,39 @@
 
 # 抖音网页版弹幕数据抓取
 
+---
+
+## 🔗 整合版：聊天室 + 一鍵啟動 + 自動更新（v1.0.3）
+
+本分支在原專案上整合了多人聊天室（`chatroom/`），與抖音彈幕**雙向互通**：
+- 聊天室房間訊息 → 顯示在抖音 webUI 的「聊天室」視窗
+- 抖音彈幕 → 注入聊天室（彈幕在上、對話在下、可拖拉調整占比）
+
+### 一鍵啟動（建議用 git clone，才有自動更新）
+
+```bash
+git clone https://github.com/tomas41026175/DouyinLiveWebFetcher.git
+cd DouyinLiveWebFetcher
+./start_all.sh        # mac / Linux
+start_all.bat         # Windows（直接雙擊亦可）
+```
+
+腳本會自動：檢測並安裝環境（Python venv + 依賴、Node 依賴、`cloudflared`）→ 啟動兩個服務 → 建立 **Cloudflare 公網隧道** → 自動開啟兩個瀏覽器分頁：
+
+- **聊天室**（Cloudflare 公網網址，分享給朋友、中國可連，**直接進房號 `123456`**）
+- **抖音弹幕 webUI**（`http://127.0.0.1:8765`，密碼見 `ui_password.txt`，預設 `0425`）
+
+### 自動更新
+
+每次啟動會 `git fetch` 比對遠端，**發現新版自動 `git pull --ff-only` 並以新版重啟**（需以 git clone 部署；本地若有改動則跳過不強制）。
+
+> 完整整合說明（架構、雙向資料流、注意事項）見 **[INTEGRATION.md](./INTEGRATION.md)**。
+> 環境需求 `mini_racer` 等已在 Python 3.14 + Apple Silicon 實測可裝。
+
+---
+
+（以下為原專案說明）
+
 ## 声明0：本代码库所有代码均只用于学习研究交流，严禁用于包括但不限于商业谋利、破坏系统、盗取个人信息等不良不法行为，违反此声明使用所产生的一切后果均由违反声明使用者承担。
 ## 侵权或涉及相关利益请联系作者：[微博](https://weibo.com/u/7751075499)、[B站](https://space.bilibili.com/4690313)、[邮箱](mailto:kukushka@126.com)
 > 2024年1月2日
