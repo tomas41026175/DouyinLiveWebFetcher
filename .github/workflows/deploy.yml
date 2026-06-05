@@ -4,6 +4,11 @@ name: Deploy to VPS
 on:
   push:
     branches: [main]
+    # 純文件變更（.md/.MD）不觸發部署，避免無謂的生產重啟。
+    # 只要 push 含任一非 .md 檔（code），仍照常部署；workflow_dispatch 可隨時手動強制部署。
+    paths-ignore:
+      - '**.md'
+      - '**.MD'
   workflow_dispatch: {}
 
 jobs:
