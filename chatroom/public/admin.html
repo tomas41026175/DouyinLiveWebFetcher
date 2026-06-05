@@ -17,6 +17,8 @@
     .btn:active { transform: scale(.98); }
     .msg { margin: 8px 0; font-size: 14px; min-height: 20px; }
     .msg.ok { color: #4c9e6a; } .msg.err { color: #b1442f; }
+    .chpw { margin: 6px 0 10px; }
+    .chpw summary { cursor: pointer; color: #6b6256; font-size: 14px; padding: 4px 0; user-select: none; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 8px; }
     .card { background: #fff; border: 1px solid #e3d9c8; border-radius: 10px; padding: 8px; text-align: center; }
     .card img { width: 100%; height: 90px; object-fit: contain; }
@@ -34,6 +36,14 @@
       <button class="btn" id="uploadBtn" type="button">上傳</button>
     </div>
     <div class="msg" id="msg"></div>
+    <details class="chpw">
+      <summary>🔑 修改管理密碼</summary>
+      <div class="bar">
+        <input type="password" id="oldpw" placeholder="舊密碼" autocomplete="current-password" />
+        <input type="password" id="newpw" placeholder="新密碼（至少 4 字）" autocomplete="new-password" />
+        <button class="btn" id="chpwBtn" type="button">修改密碼</button>
+      </div>
+    </details>
     <div class="grid" id="grid"></div>
   </div>
   <script>
@@ -96,6 +106,20 @@
         const j = await r.json();
         if (j.ok) { say(`已刪除 ${nm}`, true); load(); } else say(`刪除失敗：${j.err || '未知錯誤'}`, false);
       } catch { say('刪除失敗', false); }
+    };
+
+    $('chpwBtn').onclick = async () => {
+      const oldPassword = $('oldpw').value, newPassword = $('newpw').value.trim();
+      if (!oldPassword || newPassword.length < 4) return say('舊密碼必填、新密碼至少 4 字', false);
+      try {
+        const r = await fetch('/stickers/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword, newPassword }) });
+        const j = await r.json();
+        if (j.ok) {
+          localStorage.setItem('sticker_admin_pw', newPassword); pw.value = newPassword;
+          $('oldpw').value = ''; $('newpw').value = '';
+          say('✅ 管理密碼已修改', true);
+        } else say('修改失敗：' + (j.err || '未知錯誤'), false);
+      } catch { say('修改失敗', false); }
     };
 
     load();

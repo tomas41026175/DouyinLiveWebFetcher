@@ -8,7 +8,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
 const STICKERS_DIR = fileURLToPath(new URL('./stickers', import.meta.url)); // 貼圖資料夾（本機放圖）
 const STICKER_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
-const STICKER_ADMIN_PASSWORD = process.env.STICKER_ADMIN_PASSWORD || ''; // 貼圖管理密碼（空=停用上傳/刪除）
+let adminPassword = process.env.STICKER_ADMIN_PASSWORD || ''; // 貼圖管理密碼（可由 /admin 修改）
+const STICKER_PW_FILE = process.env.STICKER_PW_FILE || ''; // 密碼持久化檔（設了才能改密碼）
 const MAX_STICKER_BYTES = 5 * 1024 * 1024; // 單張貼圖上限 5MB
 const ROOM_CODE_LENGTH = 6;
 const DEFAULT_CAPACITY = 5;
@@ -343,7 +344,7 @@ const safeStickerName = (raw) => {
   return `${stem || 'sticker'}${ext}`;
 };
 
-const checkAdmin = (body) => Boolean(STICKER_ADMIN_PASSWORD) && body && body.password === STICKER_ADMIN_PASSWORD;
+const checkAdmin = (body) => Boolean(adminPassword) && body && body.password === adminPassword;
 
 const handleUpload = async (req, res) => {
   let body;
@@ -373,10 +374,23 @@ const handleDelete = async (req, res) => {
   catch { return jsonRes(res, 500, { ok: false, err: '刪除失敗' }); }
 };
 
+// 修改管理密碼（需舊密碼正確；寫入 STICKER_PW_FILE 持久化）
+const handleChangePassword = async (req, res) => {
+  let body;
+  try { body = await readJsonBody(req); } catch { return jsonRes(res, 400, { ok: false, err: '請求格式錯' }); }
+  if (!adminPassword || body.oldPassword !== adminPassword) return jsonRes(res, 403, { ok: false, err: '舊密碼錯誤' });
+  const np = String(body.newPassword || '').trim();
+  if (np.length < 4) return jsonRes(res, 400, { ok: false, err: '新密碼至少 4 字' });
+  if (!STICKER_PW_FILE) return jsonRes(res, 500, { ok: false, err: '伺服器未設定密碼檔，無法修改' });
+  try { await writeFile(STICKER_PW_FILE, np); adminPassword = np; return jsonRes(res, 200, { ok: true }); }
+  catch { return jsonRes(res, 500, { ok: false, err: '寫入失敗' }); }
+};
+
 const httpServer = createServer((req, res) => {
   const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
   if (req.method === 'POST' && pathname === '/stickers/upload') return handleUpload(req, res);
   if (req.method === 'POST' && pathname === '/stickers/delete') return handleDelete(req, res);
+  if (req.method === 'POST' && pathname === '/stickers/password') return handleChangePassword(req, res);
   if (pathname === '/admin' || pathname === '/admin/') { req.url = '/admin.html'; return serveStatic(req, res); }
   if (pathname === '/stickers') return serveStickerList(res);
   if (pathname.startsWith('/stickers/')) return serveSticker(pathname, res);
@@ -448,7 +462,10 @@ const connectDanmaku = () => {
   req.on('error', () => setTimeout(connectDanmaku, 3000));
 };
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
+  if (STICKER_PW_FILE) {
+    try { const v = (await readFile(STICKER_PW_FILE, 'utf8')).trim(); if (v) adminPassword = v; } catch { /* 用 env 初始值 */ }
+  }
   console.log(`Chatroom 已啟動：http://localhost:${PORT}`);
   connectDanmaku();
 });

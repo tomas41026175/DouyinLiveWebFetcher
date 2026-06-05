@@ -42,7 +42,8 @@ After=network.target danmaku.service
 [Service]
 WorkingDirectory=/root/chatroom
 Environment=PORT=80
-Environment=STICKER_ADMIN_PASSWORD=<貼圖管理密碼>
+Environment=STICKER_ADMIN_PASSWORD=<貼圖管理密碼初始值>
+Environment=STICKER_PW_FILE=/root/.sticker_admin_pw
 Environment=DANMAKU_URL=http://127.0.0.1:8765
 Environment=DANMAKU_PASSWORD=<= web_danmaku 的 ui_password.txt 值>
 ExecStart=/usr/bin/node /root/chatroom/server.js
