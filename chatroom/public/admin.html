@@ -161,6 +161,7 @@
       load();
     };
     $('uploadBtn').onclick = () => uploadFiles([...$('file').files]);
+    $('file').onchange = () => { const n = $('file').files.length; if (n) say(`已選 ${n} 張，點「上傳」開始（可一次選多張）`, true); };
     // 拖拉批量上傳（登入後拖圖片到頁面任一處）
     ['dragover', 'dragenter'].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault()));
     document.addEventListener('drop', (e) => {

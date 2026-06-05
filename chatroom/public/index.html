@@ -241,6 +241,7 @@
     .d-gift .dname { color: #d98c3a; }
     .d-like .dname { color: #c0673b; }
     .d-roomchat .dname { color: #4c9e6a; }
+    .d-sticker-img { height: 44px; max-width: 80px; object-fit: contain; vertical-align: middle; border-radius: 4px; margin-left: 4px; }
     .d-member .dname, .d-social .dname { color: var(--ink-soft); }
     .danmaku-empty { color: var(--ink-soft); font-size: 13px; padding: 6px; }
 
@@ -598,7 +599,7 @@
     let danmakuStarted = false;
     // 關鍵字高亮：name + text 含任一關鍵字 → 該行加底色
     const matchHighlight = (s) => state.highlightKw.length > 0 && state.highlightKw.some((k) => k && s.includes(k));
-    const addDanmaku = ({ dtype, name, text }) => {
+    const addDanmaku = ({ dtype, name, text, sticker }) => {
       if (!danmakuStarted) { els.danmakuList.innerHTML = ''; danmakuStarted = true; }
       const dt = dtype || 'chat';
       const row = document.createElement('div');
@@ -607,10 +608,19 @@
       if (!state.danmakuFilter[dt]) row.classList.add('dhidden');
       const who = document.createElement('span');
       who.className = 'dname'; who.textContent = name || '';
-      const tag = DANMAKU_TAG[dtype];
-      const body = document.createElement('span');
-      body.textContent = (tag ? `[${tag}] ` : '') + (text || '');
-      row.append(who, body);
+      row.appendChild(who);
+      if (sticker) {
+        const img = document.createElement('img');
+        img.className = 'd-sticker-img'; img.alt = '貼圖';
+        img.src = '/stickers/' + encodeURIComponent(sticker);
+        img.onload = () => { els.danmakuList.scrollTop = els.danmakuList.scrollHeight; };
+        row.appendChild(img);
+      } else {
+        const tag = DANMAKU_TAG[dtype];
+        const body = document.createElement('span');
+        body.textContent = (tag ? `[${tag}] ` : '') + (text || '');
+        row.appendChild(body);
+      }
       if (matchHighlight(`${name || ''} ${text || ''}`.toLowerCase())) row.classList.add('hl');
       els.danmakuList.appendChild(row);
       while (els.danmakuList.children.length > 300) els.danmakuList.removeChild(els.danmakuList.firstChild);
@@ -667,7 +677,7 @@
       host_changed: ({ isHost }) => { state.isHost = Boolean(isHost); renderLock(); addSystem('你成為新房主'); },
       lock_changed: ({ locked, by }) => { updateRoster({ locked }); addSystem(locked ? `${by} 鎖定了房間` : `${by} 解除了鎖定`); },
       message: ({ name, text, ts }) => { dropTyper(name); renderTyping(); addMessage(text, false, name, ts); addDanmaku({ dtype: 'roomchat', name, text }); },
-      sticker: ({ name, sender, ts }) => { dropTyper(sender); renderTyping(); addStickerMessage(name, false, sender, ts); addDanmaku({ dtype: 'roomchat', name: sender, text: '[貼圖]' }); },
+      sticker: ({ name, sender, ts }) => { dropTyper(sender); renderTyping(); addStickerMessage(name, false, sender, ts); addDanmaku({ dtype: 'roomchat', name: sender, sticker: name }); },
       history: ({ items }) => {
         if (els.messages.children.length > 0) return; // 重連時 DOM 已有訊息，避免重複載入
         (items || []).forEach((it) => {
@@ -788,7 +798,7 @@
       if (!state.inRoom) { banner('進入房間後才能傳貼圖', true); return; }
       send('sticker', { name: stickerName });
       addStickerMessage(stickerName, true, state.self, Date.now());
-      addDanmaku({ dtype: 'roomchat', name: state.self, text: '[貼圖]' });
+      addDanmaku({ dtype: 'roomchat', name: state.self, sticker: stickerName });
       els.stickerPanel.classList.remove('open');
     };
     const renderStickerPanel = (stickers) => {
