@@ -122,12 +122,29 @@ echo  ""
 echo  "  Ctrl+C 結束所有服務（含隧道）"
 echo "============================================================"
 
-# 自動開啟兩個網址：抖音 webUI + 聊天室（直接進房號 $ROOM）
-open "http://127.0.0.1:$DANMAKU_PORT/" >/dev/null 2>&1 || true
+# ---------- 自動開啟瀏覽器分頁：抖音 webUI + 聊天室（直接進房號 $ROOM）----------
+# 聊天室優先用「公網網址」（讓分享 / QR 編碼的是可對外網址）；取不到才退本機 localhost
+WEBUI_OPEN_URL="http://127.0.0.1:$DANMAKU_PORT/"
 if [ -n "$PUBLIC_URL" ]; then
-  open "$PUBLIC_URL/?room=$ROOM" >/dev/null 2>&1 || true
+  CHAT_OPEN_URL="$PUBLIC_URL/?room=$ROOM"
 else
-  open "http://localhost:$CHAT_PORT/?room=$ROOM" >/dev/null 2>&1 || true
+  CHAT_OPEN_URL="http://localhost:$CHAT_PORT/?room=$ROOM"
 fi
+
+c_say "==> 自動開啟瀏覽器分頁（直接進房號 $ROOM）"
+echo "    抖音 webUI : $WEBUI_OPEN_URL"
+echo "    聊天室     : $CHAT_OPEN_URL"
+
+# 開分頁：成功印 ✅，失敗印 ⚠️ + 手動網址（不再把錯誤吞掉，方便排查）
+open_tab(){
+  if open "$1" 2>/dev/null; then
+    c_ok "    ✅ 已開：$2"
+  else
+    c_warn "    ⚠️ 未能自動開「$2」，請手動貼到瀏覽器：$1"
+  fi
+}
+open_tab "$WEBUI_OPEN_URL" "抖音 webUI"
+sleep 1   # 兩分頁間隔，避免部分瀏覽器忽略連續開啟而漏開聊天室
+open_tab "$CHAT_OPEN_URL" "聊天室（房號 $ROOM）"
 
 wait
