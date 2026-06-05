@@ -11,9 +11,9 @@ const STICKER_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 let adminPassword = process.env.STICKER_ADMIN_PASSWORD || ''; // 貼圖管理密碼（可由 /admin 修改）
 const STICKER_PW_FILE = process.env.STICKER_PW_FILE || ''; // 密碼持久化檔（設了才能改密碼）
 const START_TIME = new Date().toISOString(); // server 啟動時間（≈部署時間）
-const BUILD_FILE = fileURLToPath(new URL('./.build', import.meta.url)); // 部署時寫入的版本(git sha)
-let buildVersion = 'dev';
-const handleVersion = (res) => res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ build: buildVersion, startedAt: START_TIME }));
+const PKG_FILE = fileURLToPath(new URL('./package.json', import.meta.url)); // 版本號來源（package.json version）
+let appVersion = 'dev';
+const handleVersion = (res) => res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ version: appVersion, startedAt: START_TIME }));
 const MAX_STICKER_BYTES = 5 * 1024 * 1024; // 單張貼圖上限 5MB
 const ROOM_CODE_LENGTH = 6;
 const DEFAULT_CAPACITY = 5;
@@ -482,7 +482,7 @@ httpServer.listen(PORT, async () => {
   if (STICKER_PW_FILE) {
     try { const v = (await readFile(STICKER_PW_FILE, 'utf8')).trim(); if (v) adminPassword = v; } catch { /* 用 env 初始值 */ }
   }
-  try { const b = (await readFile(BUILD_FILE, 'utf8')).trim(); if (b) buildVersion = b; } catch { /* 無 .build 用 dev */ }
+  try { const pkg = JSON.parse(await readFile(PKG_FILE, 'utf8')); if (pkg.version) appVersion = pkg.version; } catch { /* 讀不到 package.json 用 dev */ }
   console.log(`Chatroom 已啟動：http://localhost:${PORT}`);
   connectDanmaku();
 });

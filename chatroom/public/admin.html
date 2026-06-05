@@ -196,7 +196,7 @@
 
     // 顯示版本號（部署的 git sha + 部署時間）
     fetch('/version').then((r) => r.json()).then((v) => {
-      $('ver').textContent = `${v.build} · 部署 ${new Date(v.startedAt).toLocaleString()}`;
+      $('ver').textContent = `v${v.version} · 部署 ${new Date(v.startedAt).toLocaleString()}`;
     }).catch(() => {});
     // 載入時若已存密碼 → 自動驗證登入（失敗則停在登入畫面）
     const saved = localStorage.getItem('sticker_admin_pw') || '';

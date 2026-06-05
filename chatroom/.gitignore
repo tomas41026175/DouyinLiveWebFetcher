@@ -11,5 +11,3 @@ npm-debug.log*
 stickers/*
 !stickers/.gitkeep
 !stickers/README.md
-
-.build
