@@ -416,7 +416,6 @@
     </div>
   </div>
 
-  <script src="/vendor/qrcode.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const els = {
@@ -850,11 +849,22 @@
       }
       return null;
     };
-    const openShare = () => {
-      if (!state.roomCode) return;
-      const url = shareLink();
-      els.shareRoom.textContent = state.roomCode;
-      els.shareUrl.textContent = url;
+    // QR lib 按需載入：首屏不載 57KB，點「分享」才動態載入（首次連線更快）
+    let qrLibPromise = null;
+    const ensureQRLib = () => {
+      if (window.qrcode) return Promise.resolve();
+      if (!qrLibPromise) {
+        qrLibPromise = new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = '/vendor/qrcode.js';
+          s.onload = () => resolve();
+          s.onerror = () => { qrLibPromise = null; reject(new Error('QR lib 載入失敗')); };
+          document.head.appendChild(s);
+        });
+      }
+      return qrLibPromise;
+    };
+    const renderQR = (url) => {
       els.qrBox.innerHTML = '';
       const qr = makeQR(url);
       if (qr) {
@@ -864,7 +874,16 @@
       } else {
         els.qrBox.textContent = '產生 QR 失敗';
       }
-      els.shareMask.classList.add('open');
+    };
+    const openShare = async () => {
+      if (!state.roomCode) return;
+      const url = shareLink();
+      els.shareRoom.textContent = state.roomCode;
+      els.shareUrl.textContent = url;
+      els.qrBox.textContent = '產生 QR 中…';
+      els.shareMask.classList.add('open'); // 先開窗：房號/連結可立即複製，不等 QR
+      try { await ensureQRLib(); renderQR(url); }
+      catch { els.qrBox.textContent = 'QR 載入失敗，可直接複製連結'; }
     };
     const closeShare = () => els.shareMask.classList.remove('open');
     const copyShareLink = async () => {
