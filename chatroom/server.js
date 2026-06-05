@@ -414,6 +414,7 @@ const handleVerify = async (req, res) => {
 const httpServer = createServer((req, res) => {
   const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
   if (pathname === '/version') return handleVersion(res);
+  if (pathname === '/ping') return res.writeHead(204, { 'Cache-Control': 'no-cache' }).end(); // 量延遲用（極輕，204 無內容）
   if (req.method === 'POST' && pathname === '/stickers/verify') return handleVerify(req, res);
   if (req.method === 'POST' && pathname === '/stickers/upload') return handleUpload(req, res);
   if (req.method === 'POST' && pathname === '/stickers/delete') return handleDelete(req, res);
