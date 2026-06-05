@@ -146,6 +146,37 @@
     }
     .lock-btn.show { display: inline-block; }
     .lock-btn.locked { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+    .share-btn {
+      flex: none; border: 1px solid var(--line); background: transparent;
+      color: var(--ink-soft); border-radius: 8px; padding: 5px 10px; font-size: 12px;
+      cursor: pointer; font-family: inherit;
+    }
+    .share-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ---- 分享 QR Modal ---- */
+    .modal-mask {
+      display: none; position: fixed; inset: 0; z-index: 20;
+      background: rgba(0,0,0,.45); align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-mask.open { display: flex; }
+    .modal {
+      width: 100%; max-width: 320px; background: var(--paper-raised);
+      border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 22px; text-align: center; display: flex; flex-direction: column; gap: 14px;
+    }
+    .modal-title { font-size: 16px; font-weight: 600; }
+    .modal-title b { color: var(--accent); letter-spacing: 2px; }
+    .qr-box {
+      align-self: center; background: #fff; padding: 12px;
+      border-radius: 12px; border: 1px solid var(--line); line-height: 0;
+    }
+    .qr-box img { width: 200px; height: 200px; image-rendering: pixelated; display: block; }
+    .share-url {
+      font-size: 12px; color: var(--ink-soft); word-break: break-all;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions .btn { flex: 1; padding: 11px 14px; font-size: 14px; }
 
     .messages {
       flex: 1; overflow-y: auto; padding: 18px 14px;
@@ -188,7 +219,19 @@
       color: var(--ink); font-family: inherit; font-weight: 400;
     }
     .hl-input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+    .danmaku-filter {
+      flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px;
+      background: var(--paper-raised); border-bottom: 1px solid var(--line);
+    }
+    .chip {
+      border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+      border-radius: 999px; padding: 3px 11px; font-size: 12px; cursor: pointer;
+      font-family: inherit; user-select: none; transition: background .12s ease, color .12s ease, opacity .12s ease;
+    }
+    .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .chip:not(.on) { opacity: .6; }
     .danmaku-list { flex: 1; overflow-y: auto; padding: 8px 12px; -webkit-overflow-scrolling: touch; }
+    .drow.dhidden { display: none; }
     .drow { padding: 2px 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
     .drow.hl { background: var(--hl-color, rgba(192,103,59,.20)); border-radius: 6px; padding: 3px 6px; }
     .hl-color { flex: none; width: 30px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; }
@@ -229,6 +272,28 @@
       width: 52px; font-size: 20px; cursor: pointer; flex: none;
     }
     .send:disabled { opacity: .4; cursor: default; }
+
+    /* ---- 貼圖 ---- */
+    .sticker-btn {
+      border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+      border-radius: 14px; width: 46px; font-size: 20px; cursor: pointer; flex: none;
+    }
+    .sticker-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .sticker-panel {
+      display: none; gap: 8px; flex-wrap: wrap; padding: 10px 12px;
+      max-height: 180px; overflow-y: auto;
+      background: var(--paper-raised); border-top: 1px solid var(--line);
+    }
+    .sticker-panel.open { display: flex; }
+    .sticker-panel img {
+      width: 64px; height: 64px; object-fit: contain; cursor: pointer;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+      padding: 2px; transition: transform .06s ease;
+    }
+    .sticker-panel img:active { transform: scale(.92); }
+    .sticker-empty { color: var(--ink-soft); font-size: 13px; padding: 6px; }
+    .bubble.sticker-bubble { padding: 3px; background: transparent; box-shadow: none; border: none; }
+    .msg-sticker { display: block; max-width: 160px; max-height: 160px; border-radius: 10px; }
 
     .banner {
       position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
@@ -290,6 +355,7 @@
       <span class="dot"></span>
       <span class="title" id="statusText">等待其他人加入…</span>
       <span class="room">房號 <b id="roomCode">——</b></span>
+      <button class="share-btn" id="shareBtn" type="button">分享</button>
       <button class="lock-btn" id="lockBtn">鎖定房間</button>
     </div>
     <!-- 上：直播彈幕 -->
@@ -298,6 +364,13 @@
         <span>直播彈幕</span><span class="dhint" id="danmakuHint"></span>
         <input class="hl-input" id="hlInput" placeholder="高亮關鍵字（逗號分隔）" autocomplete="off" />
         <input class="hl-color" id="hlColor" type="color" value="#c0673b" title="高亮顏色" />
+      </div>
+      <div class="danmaku-filter" id="danmakuFilter">
+        <button class="chip" data-dtype="chat" type="button">聊天</button>
+        <button class="chip" data-dtype="gift" type="button">禮物</button>
+        <button class="chip" data-dtype="member" type="button">進場</button>
+        <button class="chip" data-dtype="social" type="button">關注</button>
+        <button class="chip" data-dtype="like" type="button">讚</button>
       </div>
       <div class="danmaku-list" id="danmakuList"></div>
     </div>
@@ -308,7 +381,9 @@
       <div class="messages" id="messages"></div>
       <div class="typing" id="typingIndicator"></div>
     </div>
+    <div class="sticker-panel" id="stickerPanel"></div>
     <div class="composer">
+      <button class="sticker-btn" id="stickerBtn" title="貼圖" type="button">😊</button>
       <textarea id="msgInput" rows="1" placeholder="輸入訊息…"></textarea>
       <button class="send" id="sendBtn" disabled>↑</button>
     </div>
@@ -316,6 +391,20 @@
 
   <div class="banner" id="banner"></div>
 
+  <!-- 分享 QR Modal -->
+  <div class="modal-mask" id="shareMask">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="分享房間">
+      <h3 class="modal-title">掃碼進入房間 <b id="shareRoom">——</b></h3>
+      <div class="qr-box" id="qrBox"></div>
+      <div class="share-url" id="shareUrl"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="copyUrlBtn" type="button">複製網址</button>
+        <button class="btn btn-primary" id="closeShareBtn" type="button">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/qrcode.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const els = {
@@ -328,12 +417,17 @@
       msgInput: $('msgInput'), sendBtn: $('sendBtn'), banner: $('banner'),
       danmakuPane: $('danmakuPane'), danmakuList: $('danmakuList'),
       danmakuHint: $('danmakuHint'), resizer: $('resizer'), hlInput: $('hlInput'), hlColor: $('hlColor'),
+      danmakuFilter: $('danmakuFilter'),
+      stickerBtn: $('stickerBtn'), stickerPanel: $('stickerPanel'),
+      shareBtn: $('shareBtn'), shareMask: $('shareMask'), shareRoom: $('shareRoom'),
+      qrBox: $('qrBox'), shareUrl: $('shareUrl'), copyUrlBtn: $('copyUrlBtn'), closeShareBtn: $('closeShareBtn'),
     };
 
     const state = {
       ws: null, connected: false, roomCode: null, self: '', members: [],
       inRoom: false, rejoining: false, reconnectDelay: 1000, autoJoin: null,
       highlightKw: [], // 彈幕高亮關鍵字
+      danmakuFilter: { chat: true, gift: true, member: true, social: true, like: true }, // 彈幕分類過濾（預設全開）
       typers: new Map(), // name -> 自動清除計時器 id
       lastSender: null, // 連續訊息分組用
       isHost: false, locked: false, capacity: 5,
@@ -408,6 +502,41 @@
     };
     const scrollDown = () => { els.messages.scrollTop = els.messages.scrollHeight; };
 
+    // 貼圖訊息氣泡（沿用 me/peer 連續分組樣式，氣泡內為圖片）
+    const addStickerMessage = (stickerName, mine, name, ts) => {
+      const continued = name === state.lastSender;
+      state.lastSender = name;
+      const row = document.createElement('div');
+      row.className = 'row ' + (mine ? 'me' : 'peer') + (continued ? ' cont' : '');
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble sticker-bubble';
+      const img = document.createElement('img');
+      img.className = 'msg-sticker'; img.alt = '貼圖';
+      img.src = '/stickers/' + encodeURIComponent(stickerName);
+      img.onload = scrollDown;
+      bubble.appendChild(img);
+      const meta = document.createElement('div');
+      meta.className = 'meta'; meta.textContent = fmtTime(ts);
+      if (mine) {
+        const sent = document.createElement('span');
+        sent.className = 'sent'; sent.textContent = ' ✓';
+        meta.appendChild(sent);
+        row.append(meta, bubble);
+      } else {
+        const stack = document.createElement('div');
+        stack.className = 'stack';
+        if (!continued) {
+          const sender = document.createElement('div');
+          sender.className = 'sender'; sender.textContent = name;
+          sender.style.color = colorFor(name);
+          stack.appendChild(sender);
+        }
+        stack.appendChild(bubble);
+        row.append(stack, meta);
+      }
+      els.messages.appendChild(row); scrollDown();
+    };
+
     const setStatus = (online, text) => {
       els.topbar.classList.toggle('online', online);
       els.statusText.textContent = text;
@@ -468,8 +597,11 @@
     const matchHighlight = (s) => state.highlightKw.length > 0 && state.highlightKw.some((k) => k && s.includes(k));
     const addDanmaku = ({ dtype, name, text }) => {
       if (!danmakuStarted) { els.danmakuList.innerHTML = ''; danmakuStarted = true; }
+      const dt = dtype || 'chat';
       const row = document.createElement('div');
-      row.className = 'drow d-' + (dtype || 'chat');
+      row.className = 'drow d-' + dt;
+      row.dataset.dtype = dt;
+      if (!state.danmakuFilter[dt]) row.classList.add('dhidden');
       const who = document.createElement('span');
       who.className = 'dname'; who.textContent = name || '';
       const tag = DANMAKU_TAG[dtype];
@@ -492,6 +624,26 @@
       rescanHighlight();
     };
 
+    // ---- 彈幕分類過濾（chips）----
+    const applyDanmakuFilter = () => {
+      els.danmakuList.querySelectorAll('.drow').forEach((row) => {
+        const dt = row.dataset.dtype || 'chat';
+        row.classList.toggle('dhidden', !state.danmakuFilter[dt]);
+      });
+    };
+    const renderChips = () => {
+      els.danmakuFilter.querySelectorAll('.chip').forEach((chip) => {
+        const dt = chip.dataset.dtype;
+        chip.classList.toggle('on', Boolean(state.danmakuFilter[dt]));
+        chip.onclick = () => {
+          state.danmakuFilter[dt] = !state.danmakuFilter[dt];
+          chip.classList.toggle('on', state.danmakuFilter[dt]);
+          remember('danmakuFilter', JSON.stringify(state.danmakuFilter));
+          applyDanmakuFilter();
+        };
+      });
+    };
+
     const handlers = {
       room_created: ({ code, self, members, capacity, locked, isHost }) => {
         state.self = self; state.isHost = Boolean(isHost);
@@ -511,6 +663,7 @@
       host_changed: ({ isHost }) => { state.isHost = Boolean(isHost); renderLock(); addSystem('你成為新房主'); },
       lock_changed: ({ locked, by }) => { updateRoster({ locked }); addSystem(locked ? `${by} 鎖定了房間` : `${by} 解除了鎖定`); },
       message: ({ name, text, ts }) => { dropTyper(name); renderTyping(); addMessage(text, false, name, ts); },
+      sticker: ({ name, sender, ts }) => { dropTyper(sender); renderTyping(); addStickerMessage(name, false, sender, ts); },
       danmaku: (d) => addDanmaku(d),
       typing: ({ name, isTyping }) => {
         if (isTyping) {
@@ -614,6 +767,89 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     };
 
+    // ---- 貼圖：載入清單 + 面板開關 + 送出 ----
+    const sendSticker = (stickerName) => {
+      if (!state.inRoom) { banner('進入房間後才能傳貼圖', true); return; }
+      send('sticker', { name: stickerName });
+      addStickerMessage(stickerName, true, state.self, Date.now());
+      els.stickerPanel.classList.remove('open');
+    };
+    const renderStickerPanel = (stickers) => {
+      els.stickerPanel.innerHTML = '';
+      if (!stickers.length) {
+        const empty = document.createElement('div');
+        empty.className = 'sticker-empty';
+        empty.textContent = '尚無貼圖，把圖片放進 chatroom/stickers/ 即可';
+        els.stickerPanel.appendChild(empty);
+        return;
+      }
+      stickers.forEach((nm) => {
+        const img = document.createElement('img');
+        img.src = '/stickers/' + encodeURIComponent(nm);
+        img.alt = nm; img.loading = 'lazy';
+        img.onclick = () => sendSticker(nm);
+        els.stickerPanel.appendChild(img);
+      });
+    };
+    const loadStickers = async () => {
+      try {
+        const res = await fetch('/stickers');
+        const data = await res.json();
+        renderStickerPanel(Array.isArray(data.stickers) ? data.stickers : []);
+      } catch { renderStickerPanel([]); }
+    };
+    els.stickerBtn.onclick = () => els.stickerPanel.classList.toggle('open');
+
+    // ---- 分享：QR code + 複製網址（QR 編碼 location.origin，自動是公網網址）----
+    const shareLink = () => `${location.origin}/?room=${state.roomCode}`;
+    const makeQR = (text) => {
+      for (let type = 4; type <= 40; type += 1) {
+        try {
+          const qr = qrcode(type, 'M');
+          qr.addData(text);
+          qr.make();
+          return qr;
+        } catch { /* 容量不足，加大 type 再試 */ }
+      }
+      return null;
+    };
+    const openShare = () => {
+      if (!state.roomCode) return;
+      const url = shareLink();
+      els.shareRoom.textContent = state.roomCode;
+      els.shareUrl.textContent = url;
+      els.qrBox.innerHTML = '';
+      const qr = makeQR(url);
+      if (qr) {
+        const img = document.createElement('img');
+        img.src = qr.createDataURL(6, 2); img.alt = 'QR code';
+        els.qrBox.appendChild(img);
+      } else {
+        els.qrBox.textContent = '產生 QR 失敗';
+      }
+      els.shareMask.classList.add('open');
+    };
+    const closeShare = () => els.shareMask.classList.remove('open');
+    const copyShareLink = async () => {
+      const url = shareLink();
+      try {
+        await navigator.clipboard.writeText(url);
+        banner('已複製網址');
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); banner('已複製網址'); }
+        catch { banner('複製失敗，請手動複製', true); }
+        document.body.removeChild(ta);
+      }
+    };
+    els.shareBtn.onclick = openShare;
+    els.closeShareBtn.onclick = closeShare;
+    els.copyUrlBtn.onclick = copyShareLink;
+    els.shareMask.onclick = (e) => { if (e.target === els.shareMask) closeShare(); };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShare(); });
+
     // ---- 拖拉調整「彈幕 / 對話」占比 ----
     let dragging = false;
     const applyDanmakuHeight = (px) => {
@@ -665,6 +901,14 @@
     applyHighlightKw(els.hlInput.value);
     els.hlInput.oninput = () => { remember('hlkw', els.hlInput.value); applyHighlightKw(els.hlInput.value); };
 
+    const savedFilter = recall('danmakuFilter');
+    if (savedFilter) {
+      try { state.danmakuFilter = { ...state.danmakuFilter, ...JSON.parse(savedFilter) }; }
+      catch { /* 損壞值忽略 */ }
+    }
+    renderChips();
+
+    loadStickers();
     connect();
   </script>
 </body>
