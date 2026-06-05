@@ -20,6 +20,7 @@
 整份專案（`web_danmaku` + `chatroom`）部署到海外 VPS、systemd 常駐。
 - 手動部署步驟：見 **[deploy/cloud-deploy.md](./deploy/cloud-deploy.md)**
 - 自動部署：push `main` 觸發 GitHub Actions（需在 repo Settings 設 `VPS_SSH_KEY` / `VPS_HOST` secret）
+- 日常維運（重啟 / 更新 / 改房間 / 改密碼 / 故障排查 / 備份）：見 **[deploy/maintenance.md](./deploy/maintenance.md)**
 
 ### 本機開發測試
 ```bash
