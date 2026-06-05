@@ -152,6 +152,12 @@
       cursor: pointer; font-family: inherit;
     }
     .share-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .font-btn {
+      flex: none; border: 1px solid var(--line); background: transparent;
+      color: var(--ink-soft); border-radius: 8px; padding: 5px 9px; font-size: 12px;
+      cursor: pointer; font-family: inherit; font-weight: 600; min-width: 30px;
+    }
+    .font-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ---- 分享 QR Modal ---- */
     .modal-mask {
@@ -191,7 +197,7 @@
     .meta .sent { color: #4c9e6a; }
     .bubble {
       width: fit-content; padding: 10px 14px; border-radius: 16px;
-      font-size: 15px; line-height: 1.45;
+      font-size: calc(15px * var(--font-scale, 1)); line-height: 1.45;
       white-space: normal; overflow-wrap: break-word; word-break: normal;
       box-shadow: var(--shadow);
     }
@@ -232,7 +238,7 @@
     .chip:not(.on) { opacity: .6; }
     .danmaku-list { flex: 1; overflow-y: auto; padding: 8px 12px; -webkit-overflow-scrolling: touch; }
     .drow.dhidden { display: none; }
-    .drow { padding: 2px 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+    .drow { padding: 2px 0; font-size: calc(14px * var(--font-scale, 1)); line-height: 1.4; overflow-wrap: anywhere; }
     .drow.hl { background: var(--hl-color, rgba(192,103,59,.20)); border-radius: 6px; padding: 3px 6px; }
     .hl-color { flex: none; width: 30px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; }
     .drow .dname { font-weight: 600; margin-right: 6px; }
@@ -357,6 +363,8 @@
       <span class="dot"></span>
       <span class="title" id="statusText">等待其他人加入…</span>
       <span class="room">房號 <b id="roomCode">——</b></span>
+      <button class="font-btn" id="fontDecBtn" type="button" title="縮小字體" aria-label="縮小字體">A−</button>
+      <button class="font-btn" id="fontIncBtn" type="button" title="放大字體" aria-label="放大字體">A+</button>
       <button class="share-btn" id="renameBtn" type="button">改暱稱</button>
       <button class="share-btn" id="shareBtn" type="button">分享</button>
       <button class="lock-btn" id="lockBtn">鎖定房間</button>
@@ -423,6 +431,7 @@
       danmakuHint: $('danmakuHint'), resizer: $('resizer'), hlInput: $('hlInput'), hlColor: $('hlColor'),
       danmakuFilter: $('danmakuFilter'),
       stickerBtn: $('stickerBtn'), stickerPanel: $('stickerPanel'), renameBtn: $('renameBtn'),
+      fontDecBtn: $('fontDecBtn'), fontIncBtn: $('fontIncBtn'),
       shareBtn: $('shareBtn'), shareMask: $('shareMask'), shareRoom: $('shareRoom'),
       qrBox: $('qrBox'), shareUrl: $('shareUrl'), copyUrlBtn: $('copyUrlBtn'), closeShareBtn: $('closeShareBtn'),
     };
@@ -435,6 +444,7 @@
       typers: new Map(), // name -> 自動清除計時器 id
       lastSender: null, // 連續訊息分組用
       isHost: false, locked: false, capacity: 5,
+      fontScale: 1, // 聊天氣泡 + 彈幕流字體縮放倍數（A−/A+ 調，localStorage 記憶）
     };
 
     // ---- 連線位址：依當前協議自動切 ws/wss（本機 ws、線上 wss）----
@@ -942,6 +952,20 @@
     els.hlInput.value = recall('hlkw');
     applyHighlightKw(els.hlInput.value);
     els.hlInput.oninput = () => { remember('hlkw', els.hlInput.value); applyHighlightKw(els.hlInput.value); };
+
+    // 字體大小控制（A−/A+，套用聊天氣泡 + 彈幕流，localStorage 記憶）
+    const FONT_SCALE_MIN = 0.8, FONT_SCALE_MAX = 1.8, FONT_SCALE_STEP = 0.1;
+    const applyFontScale = () => document.documentElement.style.setProperty('--font-scale', String(state.fontScale));
+    const setFontScale = (next) => {
+      state.fontScale = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, Math.round(next * 100) / 100));
+      applyFontScale();
+      remember('fontScale', String(state.fontScale));
+    };
+    els.fontDecBtn.onclick = () => setFontScale(state.fontScale - FONT_SCALE_STEP);
+    els.fontIncBtn.onclick = () => setFontScale(state.fontScale + FONT_SCALE_STEP);
+    const savedScale = parseFloat(recall('fontScale'));
+    if (savedScale >= FONT_SCALE_MIN && savedScale <= FONT_SCALE_MAX) state.fontScale = savedScale;
+    applyFontScale();
 
     const savedFilter = recall('danmakuFilter');
     if (savedFilter) {
