@@ -28,7 +28,7 @@ jobs:
             -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
             chatroom/ "root@${HOST}:/root/chatroom/"
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no "root@${HOST}" \
-            "cd /root/chatroom && npm install --omit=dev >/dev/null 2>&1; systemctl restart chatroom"
+            "cd /root/chatroom && npm install --omit=dev >/dev/null 2>&1; printf '%s' '${{ github.sha }}' | cut -c1-7 > /root/chatroom/.build; systemctl restart chatroom"
 
       - name: Deploy web_danmaku（只同步程式碼，保留 .env / venv / 統計）
         run: |
