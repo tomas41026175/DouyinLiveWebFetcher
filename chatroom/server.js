@@ -2,6 +2,7 @@ import { createServer, get as httpGet } from 'node:http';
 import { readFile, readdir, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -35,6 +36,8 @@ const MIME_TYPES = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
 };
+// 跨境慢鏈路優化：文本資源 gzip 壓縮（圖片已是壓縮格式，不壓）
+const COMPRESSIBLE_EXTS = new Set(['.html', '.js', '.css', '.json', '.svg']);
 
 // rooms: Map<roomCode, { members: Set<WebSocket>, capacity: number, locked: boolean, host: WebSocket }>
 const rooms = new Map();
@@ -299,7 +302,14 @@ const serveStatic = async (req, res) => {
     const ext = extname(resolved).toLowerCase();
     const headers = { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' };
     if (ext === '.html') headers['Cache-Control'] = 'no-cache'; // html 不快取，更新重整即見
-    res.writeHead(200, headers).end(file);
+    const acceptsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+    if (COMPRESSIBLE_EXTS.has(ext) && acceptsGzip) {
+      headers['Content-Encoding'] = 'gzip';
+      headers['Vary'] = 'Accept-Encoding';
+      res.writeHead(200, headers).end(gzipSync(file)); // 文本資源即時壓縮（檔小，<5ms）
+    } else {
+      res.writeHead(200, headers).end(file);
+    }
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
   }
