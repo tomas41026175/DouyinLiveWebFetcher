@@ -6,3 +6,8 @@ npm-debug.log*
 .env.local
 .playwright-mcp/
 *.png
+
+# 貼圖檔不進 git（使用者本機放在 stickers/）；只保留資料夾與說明
+stickers/*
+!stickers/.gitkeep
+!stickers/README.md

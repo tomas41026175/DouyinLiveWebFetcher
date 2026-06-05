@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>貼圖管理</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4ede1; color: #2e2a24; padding: 20px; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .hint { color: #6b6256; font-size: 13px; }
+    .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
+    input[type=password], input[type=file] { font-size: 16px; padding: 8px 10px; border: 1px solid #e3d9c8; border-radius: 8px; background: #fff; color: #2e2a24; }
+    .btn { padding: 9px 16px; border: none; border-radius: 8px; background: #c0673b; color: #fff; font-size: 15px; cursor: pointer; }
+    .btn:active { transform: scale(.98); }
+    .msg { margin: 8px 0; font-size: 14px; min-height: 20px; }
+    .msg.ok { color: #4c9e6a; } .msg.err { color: #b1442f; }
+    .chpw { margin: 6px 0 10px; }
+    .chpw summary { cursor: pointer; color: #6b6256; font-size: 14px; padding: 4px 0; user-select: none; }
+    @media (max-width: 480px) {
+      body { padding: 12px; }
+      h1 { font-size: 20px; }
+      .bar { flex-direction: column; align-items: stretch; gap: 8px; margin: 12px 0; }
+      .bar input, .bar .btn { width: 100%; }
+      .btn { padding: 12px 16px; }            /* 手機按鈕加高好點 */
+      .grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+      .card { padding: 6px; }
+      .card img { height: 72px; }
+      .card .del { padding: 8px; }            /* 刪除鈕加高好點 */
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 8px; }
+    .card { background: #fff; border: 1px solid #e3d9c8; border-radius: 10px; padding: 8px; text-align: center; }
+    .card img { width: 100%; height: 90px; object-fit: contain; }
+    .card .nm { font-size: 11px; color: #6b6256; word-break: break-all; margin: 4px 0; }
+    .card .del { background: #b1442f; color: #fff; border: none; border-radius: 6px; padding: 5px 8px; font-size: 12px; cursor: pointer; width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>貼圖管理</h1>
+    <p class="hint">上傳 / 刪除聊天室貼圖。需要管理密碼。支援 png / jpg / gif / webp，單張 ≤ 5MB。</p>
+    <div class="bar">
+      <input type="password" id="pw" placeholder="管理密碼" autocomplete="current-password" />
+      <input type="file" id="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple />
+      <button class="btn" id="uploadBtn" type="button">上傳</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <details class="chpw">
+      <summary>🔑 修改管理密碼</summary>
+      <div class="bar">
+        <input type="password" id="oldpw" placeholder="舊密碼" autocomplete="current-password" />
+        <input type="password" id="newpw" placeholder="新密碼（至少 4 字）" autocomplete="new-password" />
+        <button class="btn" id="chpwBtn" type="button">修改密碼</button>
+      </div>
+    </details>
+    <div class="grid" id="grid"></div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const pw = $('pw'), grid = $('grid'), msg = $('msg');
+    pw.value = localStorage.getItem('sticker_admin_pw') || '';
+    pw.oninput = () => localStorage.setItem('sticker_admin_pw', pw.value);
+    const say = (t, ok) => { msg.textContent = t; msg.className = 'msg ' + (ok ? 'ok' : 'err'); };
+
+    const load = async () => {
+      try {
+        const r = await fetch('/stickers');
+        const { stickers } = await r.json();
+        grid.innerHTML = '';
+        if (!stickers.length) { grid.innerHTML = '<p class="hint">尚無貼圖</p>'; return; }
+        stickers.forEach((nm) => {
+          const c = document.createElement('div'); c.className = 'card';
+          const img = document.createElement('img'); img.src = '/stickers/' + encodeURIComponent(nm); img.alt = nm; img.loading = 'lazy';
+          const nd = document.createElement('div'); nd.className = 'nm'; nd.textContent = nm;
+          const b = document.createElement('button'); b.className = 'del'; b.type = 'button'; b.textContent = '刪除';
+          b.onclick = () => del(nm);
+          c.append(img, nd, b); grid.appendChild(c);
+        });
+      } catch { say('載入清單失敗', false); }
+    };
+
+    const fileToDataURL = (f) => new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f);
+    });
+
+    // 上傳前壓縮：非 GIF 縮到 ≤512px + 重新編碼（GIF 保留動圖不壓）
+    const compressImage = (f) => new Promise((resolve) => {
+      if (f.type === 'image/gif') { fileToDataURL(f).then(resolve); return; }
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 512;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > MAX || h > MAX) {
+          if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; } else { w = Math.round((w * MAX) / h); h = MAX; }
+        }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        const type = f.type === 'image/png' ? 'image/png' : (f.type === 'image/webp' ? 'image/webp' : 'image/jpeg');
+        resolve(type === 'image/png' ? c.toDataURL(type) : c.toDataURL(type, 0.85));
+      };
+      img.onerror = () => fileToDataURL(f).then(resolve);
+      fileToDataURL(f).then((d) => { img.src = d; });
+    });
+
+    $('uploadBtn').onclick = async () => {
+      const files = [...$('file').files];
+      if (!pw.value) return say('請先輸入管理密碼', false);
+      if (!files.length) return say('請先選擇圖片', false);
+      let ok = 0, fail = 0;
+      for (const f of files) {
+        try {
+          const dataUrl = await compressImage(f);
+          const r = await fetch('/stickers/upload', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pw.value, name: f.name, dataUrl }),
+          });
+          const j = await r.json();
+          if (j.ok) ok += 1; else { fail += 1; say(`「${f.name}」失敗：${j.err || '未知錯誤'}`, false); }
+        } catch { fail += 1; }
+      }
+      $('file').value = '';
+      if (ok) say(`上傳成功 ${ok} 張${fail ? `，失敗 ${fail}` : ''}`, true);
+      load();
+    };
+
+    const del = async (nm) => {
+      if (!pw.value) return say('請先輸入管理密碼', false);
+      if (!confirm(`確定刪除「${nm}」？`)) return;
+      try {
+        const r = await fetch('/stickers/delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw.value, name: nm }),
+        });
+        const j = await r.json();
+        if (j.ok) { say(`已刪除 ${nm}`, true); load(); } else say(`刪除失敗：${j.err || '未知錯誤'}`, false);
+      } catch { say('刪除失敗', false); }
+    };
+
+    $('chpwBtn').onclick = async () => {
+      const oldPassword = $('oldpw').value, newPassword = $('newpw').value.trim();
+      if (!oldPassword || newPassword.length < 4) return say('舊密碼必填、新密碼至少 4 字', false);
+      try {
+        const r = await fetch('/stickers/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword, newPassword }) });
+        const j = await r.json();
+        if (j.ok) {
+          localStorage.setItem('sticker_admin_pw', newPassword); pw.value = newPassword;
+          $('oldpw').value = ''; $('newpw').value = '';
+          say('✅ 管理密碼已修改', true);
+        } else say('修改失敗：' + (j.err || '未知錯誤'), false);
+      } catch { say('修改失敗', false); }
+    };
+
+    load();
+  </script>
+</body>
+</html>
