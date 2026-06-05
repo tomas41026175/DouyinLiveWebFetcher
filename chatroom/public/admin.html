@@ -19,6 +19,17 @@
     .msg.ok { color: #4c9e6a; } .msg.err { color: #b1442f; }
     .chpw { margin: 6px 0 10px; }
     .chpw summary { cursor: pointer; color: #6b6256; font-size: 14px; padding: 4px 0; user-select: none; }
+    @media (max-width: 480px) {
+      body { padding: 12px; }
+      h1 { font-size: 20px; }
+      .bar { flex-direction: column; align-items: stretch; gap: 8px; margin: 12px 0; }
+      .bar input, .bar .btn { width: 100%; }
+      .btn { padding: 12px 16px; }            /* 手機按鈕加高好點 */
+      .grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+      .card { padding: 6px; }
+      .card img { height: 72px; }
+      .card .del { padding: 8px; }            /* 刪除鈕加高好點 */
+    }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 8px; }
     .card { background: #fff; border: 1px solid #e3d9c8; border-radius: 10px; padding: 8px; text-align: center; }
     .card img { width: 100%; height: 90px; object-fit: contain; }
@@ -74,6 +85,25 @@
       const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f);
     });
 
+    // 上傳前壓縮：非 GIF 縮到 ≤512px + 重新編碼（GIF 保留動圖不壓）
+    const compressImage = (f) => new Promise((resolve) => {
+      if (f.type === 'image/gif') { fileToDataURL(f).then(resolve); return; }
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 512;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > MAX || h > MAX) {
+          if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; } else { w = Math.round((w * MAX) / h); h = MAX; }
+        }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        const type = f.type === 'image/png' ? 'image/png' : (f.type === 'image/webp' ? 'image/webp' : 'image/jpeg');
+        resolve(type === 'image/png' ? c.toDataURL(type) : c.toDataURL(type, 0.85));
+      };
+      img.onerror = () => fileToDataURL(f).then(resolve);
+      fileToDataURL(f).then((d) => { img.src = d; });
+    });
+
     $('uploadBtn').onclick = async () => {
       const files = [...$('file').files];
       if (!pw.value) return say('請先輸入管理密碼', false);
@@ -81,7 +111,7 @@
       let ok = 0, fail = 0;
       for (const f of files) {
         try {
-          const dataUrl = await fileToDataURL(f);
+          const dataUrl = await compressImage(f);
           const r = await fetch('/stickers/upload', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: pw.value, name: f.name, dataUrl }),
