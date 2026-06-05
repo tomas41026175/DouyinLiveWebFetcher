@@ -292,8 +292,10 @@ const serveStatic = async (req, res) => {
 
   try {
     const file = await readFile(resolved);
-    const mime = MIME_TYPES[extname(resolved)] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime }).end(file);
+    const ext = extname(resolved).toLowerCase();
+    const headers = { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' };
+    if (ext === '.html') headers['Cache-Control'] = 'no-cache'; // html 不快取，更新重整即見
+    res.writeHead(200, headers).end(file);
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
   }

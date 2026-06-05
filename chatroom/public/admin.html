@@ -139,7 +139,7 @@
 
     const uploadFiles = async (files) => {
       if (!currentPw) return say('請先登入', false);
-      const imgs = files.filter((f) => f.type.startsWith('image/'));
+      const imgs = files.filter((f) => !f.type || f.type.startsWith('image/'));
       if (!imgs.length) return say('請選擇圖片', false);
       let ok = 0, fail = 0;
       const btn = $('uploadBtn'); btn.disabled = true;
