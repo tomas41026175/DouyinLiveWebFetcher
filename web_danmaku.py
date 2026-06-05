@@ -793,6 +793,7 @@ PAGE = r"""<!DOCTYPE html>
 <header>
   <h1>抖音弹幕</h1>
   <button class="ghost" title="另開聊天室（Cloudflare 公網網址）" onclick="fetch('/chatroom_url').then(r=>r.text()).then(u=>window.open((u||'').replace(/^﻿/,'').trim()||('http://'+location.hostname+':3000'),'_blank')).catch(()=>window.open('http://'+location.hostname+':3000','_blank'))">開啟聊天室 ↗</button>
+  <button class="ghost" id="switchSrcBtn" title="切换到另一版资料来源（本机 ⇄ VPS）">⇄ 另一版</button>
   <span class="pill" style="background:#173a26;">版本 <b id="ver" style="color:#7ee0a1;">__VERSION__</b></span>
   <span class="pill"><span id="dot" class="dot off"></span><span id="status">连接中…</span></span>
   <span class="pill">房间 <b id="room">-</b></span>
@@ -1371,6 +1372,16 @@ PAGE = r"""<!DOCTYPE html>
   document.getElementById('watchRoomInput').addEventListener('keydown', function(e){ if (e.key==='Enter') document.getElementById('addWatchRoomBtn').click(); });
   renderRoomChips(); applyRoomMode();
 
+  // 切換資料來源版本（本機 localhost ⇄ VPS 167.179.84.87）
+  (function(){
+    var btn = document.getElementById('switchSrcBtn'); if (!btn) return;
+    var isVPS = (location.hostname === '167.179.84.87');
+    btn.textContent = isVPS ? '⇄ 切到本机版' : '⇄ 切到VPS版';
+    btn.addEventListener('click', function(){
+      window.open(isVPS ? 'http://localhost:8765/' : 'http://167.179.84.87:8765/', '_blank');
+    });
+  })();
+
   const es = new EventSource('/stream');
   es.onopen = function(){ document.getElementById('dot').classList.remove('off');
                           document.getElementById('status').textContent='已连接'; };
@@ -1589,7 +1600,8 @@ def main():
         print("未提供直播间号，结束。")
         sys.exit(1)
 
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    bind_host = os.environ.get("DY_BIND", "127.0.0.1")  # 預設僅本機；VPS 設 DY_BIND=0.0.0.0 對外（webUI 切換來源用）
+    server = ThreadingHTTPServer((bind_host, PORT), Handler)
     server.daemon_threads = True
 
     manager.switch(live_id)
