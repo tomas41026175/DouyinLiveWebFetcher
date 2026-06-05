@@ -1,5 +1,5 @@
 import { createServer, get as httpGet } from 'node:http';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -8,6 +8,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
 const STICKERS_DIR = fileURLToPath(new URL('./stickers', import.meta.url)); // 貼圖資料夾（本機放圖）
 const STICKER_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+const STICKER_ADMIN_PASSWORD = process.env.STICKER_ADMIN_PASSWORD || ''; // 貼圖管理密碼（空=停用上傳/刪除）
+const MAX_STICKER_BYTES = 5 * 1024 * 1024; // 單張貼圖上限 5MB
 const ROOM_CODE_LENGTH = 6;
 const DEFAULT_CAPACITY = 5;
 const MIN_CAPACITY = 2;
@@ -31,6 +33,23 @@ const MIME_TYPES = {
 
 // rooms: Map<roomCode, { members: Set<WebSocket>, capacity: number, locked: boolean, host: WebSocket }>
 const rooms = new Map();
+
+// ---- 對話紀錄 cache（記憶體；UTC+8 每日重置）----
+const HISTORY_MAX = 300;
+const roomHistory = new Map(); // code -> { day:'YYYY-MM-DD', items:[{type,name,text|sticker,ts}] }
+const dayKeyOf = (ts) => new Date(ts + 8 * 3600 * 1000).toISOString().slice(0, 10); // 東八區日期邊界
+const pushHistory = (code, item) => {
+  const today = dayKeyOf(item.ts);
+  let h = roomHistory.get(code);
+  if (!h || h.day !== today) { h = { day: today, items: [] }; roomHistory.set(code, h); } // 跨日重置
+  h.items.push(item);
+  if (h.items.length > HISTORY_MAX) h.items.splice(0, h.items.length - HISTORY_MAX);
+};
+const getHistory = (code) => {
+  const h = roomHistory.get(code);
+  if (!h || h.day !== dayKeyOf(Date.now())) { roomHistory.delete(code); return []; } // 跨日清空
+  return h.items;
+};
 
 const send = (socket, type, payload = {}) => {
   if (socket.readyState === socket.OPEN) {
@@ -114,6 +133,7 @@ const handleCreate = (socket, name, capacity) => {
   socket.name = uniqueName(code, sanitizeName(name));
   rooms.set(code, { members: new Set([socket]), capacity: sanitizeCapacity(capacity), locked: false, host: socket });
   socket.roomCode = code;
+  send(socket, 'history', { items: getHistory(code) });
   send(socket, 'room_created', { code, self: socket.name, isHost: true, ...roomState(code) });
 };
 
@@ -144,12 +164,14 @@ const handleEnter = (socket, code, name, capacity) => {
   if (!room) {
     rooms.set(normalizedCode, { members: new Set([socket]), capacity: sanitizeCapacity(capacity), locked: false, host: socket });
     socket.roomCode = normalizedCode;
+    send(socket, 'history', { items: getHistory(normalizedCode) });
     send(socket, 'room_created', { code: normalizedCode, self: socket.name, isHost: true, ...roomState(normalizedCode) });
     return;
   }
 
   room.members.add(socket);
   socket.roomCode = normalizedCode;
+  send(socket, 'history', { items: getHistory(normalizedCode) });
   send(socket, 'joined', { code: normalizedCode, self: socket.name, isHost: room.host === socket, ...roomState(normalizedCode) });
   peersOf(socket).forEach((peer) => send(peer, 'peer_joined', { name: socket.name, ...roomState(normalizedCode) }));
 };
@@ -182,6 +204,7 @@ const handleMessage = (socket, text) => {
   const content = String(text || '').slice(0, 4000);
   if (!content || !socket.roomCode) return;
   const ts = Date.now();
+  pushHistory(socket.roomCode, { type: 'message', name: socket.name, text: content, ts });
   // 轉給房內其他所有人，不回送自己（無自我回聲）
   peersOf(socket).forEach((peer) => send(peer, 'message', { name: socket.name, text: content, ts }));
   // 同時鏡像到抖音 webUI 的「聊天室」視窗
@@ -207,8 +230,20 @@ const handleSticker = async (socket, name) => {
   const stickers = await listStickers();
   if (!stickers.includes(safeName)) return; // 防注入 / 路徑穿越
   const ts = Date.now();
+  pushHistory(socket.roomCode, { type: 'sticker', name: socket.name, sticker: safeName, ts });
   peersOf(socket).forEach((peer) => send(peer, 'sticker', { name: safeName, sender: socket.name, ts }));
   forwardSticker(socket.roomCode, socket.name, safeName);
+};
+
+// 房間內改暱稱：唯一化後廣播給房內（含自己確認），讓直接進房的訪客可改名
+const handleRename = (socket, name) => {
+  if (!socket.roomCode) return;
+  const old = socket.name;
+  const newName = uniqueName(socket.roomCode, sanitizeName(name));
+  if (newName === old) return;
+  socket.name = newName;
+  send(socket, 'renamed', { self: newName, ...roomState(socket.roomCode) });
+  peersOf(socket).forEach((peer) => send(peer, 'peer_renamed', { old, name: newName, ...roomState(socket.roomCode) }));
 };
 
 const handleTyping = (socket, isTyping) => {
@@ -234,6 +269,8 @@ const handleClientMessage = (socket, raw) => {
       return handleMessage(socket, data.text);
     case 'sticker':
       return handleSticker(socket, data.name);
+    case 'rename':
+      return handleRename(socket, data.name);
     case 'typing':
       return handleTyping(socket, data.isTyping);
     default:
@@ -283,8 +320,64 @@ const serveSticker = async (pathname, res) => {
   }
 };
 
+// ---- 貼圖 CRUD（上傳 / 刪除，管理密碼保護；以 base64 JSON 傳輸，免額外依賴）----
+const jsonRes = (res, code, obj) => res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(obj));
+
+const readJsonBody = (req, limit = 8 * 1024 * 1024) => new Promise((resolve, reject) => {
+  let size = 0; const chunks = [];
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > limit) { reject(new Error('too large')); req.destroy(); return; }
+    chunks.push(c);
+  });
+  req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new Error('bad json')); } });
+  req.on('error', reject);
+});
+
+// 安全貼圖檔名：去路徑、限副檔名、清特殊字元
+const safeStickerName = (raw) => {
+  const base = String(raw || '').replace(/[/\\]/g, '').trim();
+  const ext = extname(base).toLowerCase();
+  if (!STICKER_EXTS.has(ext)) return null;
+  const stem = base.slice(0, base.length - ext.length).replace(/[^a-zA-Z0-9_一-龥-]/g, '_').slice(0, 60);
+  return `${stem || 'sticker'}${ext}`;
+};
+
+const checkAdmin = (body) => Boolean(STICKER_ADMIN_PASSWORD) && body && body.password === STICKER_ADMIN_PASSWORD;
+
+const handleUpload = async (req, res) => {
+  let body;
+  try { body = await readJsonBody(req); } catch { return jsonRes(res, 400, { ok: false, err: '請求格式錯' }); }
+  if (!checkAdmin(body)) return jsonRes(res, 403, { ok: false, err: '管理密碼錯誤' });
+  const name = safeStickerName(body.name);
+  if (!name) return jsonRes(res, 400, { ok: false, err: '檔名或格式不合（限 png/jpg/jpeg/gif/webp）' });
+  const m = /^data:image\/[a-zA-Z.+-]+;base64,(.+)$/.exec(String(body.dataUrl || ''));
+  if (!m) return jsonRes(res, 400, { ok: false, err: '圖片資料格式錯' });
+  const buf = Buffer.from(m[1], 'base64');
+  if (buf.length === 0 || buf.length > MAX_STICKER_BYTES) return jsonRes(res, 400, { ok: false, err: '檔案為空或超過 5MB' });
+  try {
+    await mkdir(STICKERS_DIR, { recursive: true });
+    await writeFile(join(STICKERS_DIR, name), buf);
+    return jsonRes(res, 200, { ok: true, name });
+  } catch { return jsonRes(res, 500, { ok: false, err: '寫入失敗' }); }
+};
+
+const handleDelete = async (req, res) => {
+  let body;
+  try { body = await readJsonBody(req); } catch { return jsonRes(res, 400, { ok: false, err: '請求格式錯' }); }
+  if (!checkAdmin(body)) return jsonRes(res, 403, { ok: false, err: '管理密碼錯誤' });
+  const list = await listStickers();
+  const name = String(body.name || '');
+  if (!list.includes(name)) return jsonRes(res, 404, { ok: false, err: '貼圖不存在' });
+  try { await unlink(join(STICKERS_DIR, name)); return jsonRes(res, 200, { ok: true }); }
+  catch { return jsonRes(res, 500, { ok: false, err: '刪除失敗' }); }
+};
+
 const httpServer = createServer((req, res) => {
   const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (req.method === 'POST' && pathname === '/stickers/upload') return handleUpload(req, res);
+  if (req.method === 'POST' && pathname === '/stickers/delete') return handleDelete(req, res);
+  if (pathname === '/admin' || pathname === '/admin/') { req.url = '/admin.html'; return serveStatic(req, res); }
   if (pathname === '/stickers') return serveStickerList(res);
   if (pathname.startsWith('/stickers/')) return serveSticker(pathname, res);
   return serveStatic(req, res);

@@ -15,3 +15,8 @@ stats/
 rooms.json
 chatroom_url.txt
 .cf_tunnel.log
+
+# frp（內網穿透）：設定含 token、下載的 binary、生成的設定都不入庫
+frp.conf
+.frp/
+.frp_tunnel.log

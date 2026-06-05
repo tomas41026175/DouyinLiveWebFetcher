@@ -355,6 +355,7 @@
       <span class="dot"></span>
       <span class="title" id="statusText">等待其他人加入…</span>
       <span class="room">房號 <b id="roomCode">——</b></span>
+      <button class="share-btn" id="renameBtn" type="button">改暱稱</button>
       <button class="share-btn" id="shareBtn" type="button">分享</button>
       <button class="lock-btn" id="lockBtn">鎖定房間</button>
     </div>
@@ -418,7 +419,7 @@
       danmakuPane: $('danmakuPane'), danmakuList: $('danmakuList'),
       danmakuHint: $('danmakuHint'), resizer: $('resizer'), hlInput: $('hlInput'), hlColor: $('hlColor'),
       danmakuFilter: $('danmakuFilter'),
-      stickerBtn: $('stickerBtn'), stickerPanel: $('stickerPanel'),
+      stickerBtn: $('stickerBtn'), stickerPanel: $('stickerPanel'), renameBtn: $('renameBtn'),
       shareBtn: $('shareBtn'), shareMask: $('shareMask'), shareRoom: $('shareRoom'),
       qrBox: $('qrBox'), shareUrl: $('shareUrl'), copyUrlBtn: $('copyUrlBtn'), closeShareBtn: $('closeShareBtn'),
     };
@@ -648,7 +649,7 @@
       room_created: ({ code, self, members, capacity, locked, isHost }) => {
         state.self = self; state.isHost = Boolean(isHost);
         enterChat(code); updateRoster({ members, capacity, locked });
-        if (!state.rejoining) banner('房間已建立，把房號告訴朋友');
+        if (!state.rejoining) { banner('房間已建立，把房號告訴朋友'); maybeAskName(); }
         state.rejoining = false;
       },
       joined: ({ code, self, members, capacity, locked, isHost }) => {
@@ -656,6 +657,7 @@
         enterChat(code); updateRoster({ members, capacity, locked });
         const others = members.filter((m) => m !== self);
         addSystem(others.length ? `你已加入，房內：${others.join('、')}` : '你已加入，目前只有你');
+        if (!state.rejoining) maybeAskName();
         state.rejoining = false;
       },
       peer_joined: ({ name, members, capacity, locked }) => { updateRoster({ members, capacity, locked }); addSystem(`${name} 加入了`); },
@@ -664,6 +666,17 @@
       lock_changed: ({ locked, by }) => { updateRoster({ locked }); addSystem(locked ? `${by} 鎖定了房間` : `${by} 解除了鎖定`); },
       message: ({ name, text, ts }) => { dropTyper(name); renderTyping(); addMessage(text, false, name, ts); },
       sticker: ({ name, sender, ts }) => { dropTyper(sender); renderTyping(); addStickerMessage(name, false, sender, ts); },
+      history: ({ items }) => {
+        if (els.messages.children.length > 0) return; // 重連時 DOM 已有訊息，避免重複載入
+        (items || []).forEach((it) => {
+          if (it.type === 'sticker') addStickerMessage(it.sticker, false, it.name, it.ts);
+          else addMessage(it.text, false, it.name, it.ts);
+        });
+        if ((items || []).length) addSystem('— 以上為今日稍早的對話 —');
+        state.lastSender = null;
+      },
+      renamed: ({ self }) => { state.self = self; banner(`暱稱已改為 ${self}`); },
+      peer_renamed: ({ old, name, members, capacity, locked }) => { updateRoster({ members, capacity, locked }); addSystem(`${old} 改名為 ${name}`); },
       danmaku: (d) => addDanmaku(d),
       typing: ({ name, isTyping }) => {
         if (isTyping) {
@@ -845,6 +858,21 @@
       }
     };
     els.shareBtn.onclick = openShare;
+    // 改暱稱（直接進房 / 掃碼進房常是訪客，可隨時改）
+    const doRename = () => {
+      const nv = prompt('輸入新暱稱（最多 16 字）', state.self || '');
+      if (nv === null) return;
+      const name = nv.trim().slice(0, 16);
+      if (!name || name === state.self) return;
+      remember('name', name);
+      send('rename', { name });
+    };
+    els.renameBtn.onclick = doRename;
+    // 首次進房若沒設過暱稱（訪客XXXX），主動提示設定一次
+    const maybeAskName = () => {
+      if (!/^訪客/.test(state.self || '') || recall('name')) return;
+      setTimeout(doRename, 400);
+    };
     els.closeShareBtn.onclick = closeShare;
     els.copyUrlBtn.onclick = copyShareLink;
     els.shareMask.onclick = (e) => { if (e.target === els.shareMask) closeShare(); };

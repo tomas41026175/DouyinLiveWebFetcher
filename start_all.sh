@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 一鍵啟動（mac/Linux）：檢測/安裝環境 → 啟動「抖音弹幕 web_danmaku(本機)」+「聊天室 chatroom」
-# 聊天室透過 Cloudflare 隧道取得「公網網址」分享給朋友（不走 localhost）。
+# 本腳本僅供「本機開發測試」（兩服務跑 localhost）。
+# 生產環境：整份專案已部署到 VPS（web_danmaku + chatroom + systemd），見 deploy/cloud-deploy.md。
 # 用法： ./start_all.sh        （Ctrl+C 結束所有服務）
 
 set -uo pipefail
@@ -9,7 +10,6 @@ CHATROOM="$ROOT/chatroom"
 VENV="$ROOT/venv"
 DANMAKU_PORT=8765
 CHAT_PORT=3000
-CF_LOG="$ROOT/.cf_tunnel.log"
 CHAT_URL_FILE="$ROOT/chatroom_url.txt"
 ROOM=123456   # 啟動後聊天室自動進入的固定房號
 
@@ -42,21 +42,12 @@ if [ -z "${DY_SELF_UPDATED:-}" ] && git -C "$ROOT" rev-parse --git-dir >/dev/nul
 fi
 
 # ---------- [1/5] 基礎工具 ----------
-c_say "==> [1/5] 檢測 Python / Node / cloudflared"
+c_say "==> [1/5] 檢測 Python / Node"
 PY="$(command -v python3 || true)"
 [ -z "$PY" ] && { c_err "缺 python3：brew install python3"; exit 1; }
 echo "    python: $("$PY" --version 2>&1)"
 command -v node >/dev/null 2>&1 || { c_err "缺 node：brew install node"; exit 1; }
 echo "    node:   $(node --version)"
-if ! command -v cloudflared >/dev/null 2>&1; then
-  c_warn "    未裝 cloudflared，嘗試安裝…"
-  if command -v brew >/dev/null 2>&1; then
-    brew install cloudflared || { c_err "    cloudflared 安裝失敗，請手動安裝後重試"; exit 1; }
-  else
-    c_err "    找不到 brew，請手動安裝 cloudflared（https://github.com/cloudflare/cloudflared）後重試"; exit 1
-  fi
-fi
-echo "    cloudflared: $(cloudflared --version 2>&1 | head -1)"
 
 # ---------- [2/5] Python venv + 依賴 ----------
 c_say "==> [2/5] Python 環境 (venv + requirements)"
@@ -84,7 +75,7 @@ c_say "==> [4/5] 啟動 web_danmaku + chatroom（本機）"
 lsof -tiTCP:$DANMAKU_PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
 lsof -tiTCP:$CHAT_PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 1
-rm -f "$CF_LOG" "$CHAT_URL_FILE"
+rm -f "$CHAT_URL_FILE"
 
 PASSWORD="$(tr -d '[:space:]' < "$ROOT/ui_password.txt" 2>/dev/null || echo 0425)"
 PIDS=()
@@ -97,16 +88,11 @@ PIDS+=($!)
 PIDS+=($!)
 sleep 3
 
-# ---------- [5/5] Cloudflare 隧道（聊天室公網網址）----------
-c_say "==> [5/5] 建立 Cloudflare 隧道（聊天室公網網址）"
-cloudflared tunnel --url "http://localhost:$CHAT_PORT" >"$CF_LOG" 2>&1 &
-PIDS+=($!)
+# ---------- [5/5] 本機開發測試模式（生產環境用 VPS 雲端部署）----------
+# 整份專案已部署到 VPS（web_danmaku + chatroom + systemd 常駐）對外服務。
+# 本腳本只在本機跑兩服務供開發測試，不對外穿透。
+c_say "==> [5/5] 本機開發測試（聊天室僅 localhost:$CHAT_PORT）"
 PUBLIC_URL=""
-for _ in $(seq 1 30); do
-  PUBLIC_URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$CF_LOG" 2>/dev/null | head -1)"
-  [ -n "$PUBLIC_URL" ] && break
-  sleep 1
-done
 [ -n "$PUBLIC_URL" ] && printf '%s' "$PUBLIC_URL" > "$CHAT_URL_FILE"
 
 echo ""
@@ -115,11 +101,11 @@ if [ -n "$PUBLIC_URL" ]; then
   c_ok "  ✅ 聊天室（分享給朋友這個網址，中國可連）："
   echo "       $PUBLIC_URL"
 else
-  c_warn "  ⚠️ 未取得 Cloudflare 網址（看 $CF_LOG）；本機自測： http://localhost:$CHAT_PORT"
+  c_warn "  ⚠️ 無公網網址；本機自測： http://localhost:$CHAT_PORT"
 fi
 echo  "  抖音弹幕 webUI（本機自己看）: http://127.0.0.1:$DANMAKU_PORT  (密碼 $PASSWORD)"
 echo  ""
-echo  "  Ctrl+C 結束所有服務（含隧道）"
+echo  "  Ctrl+C 結束所有服務"
 echo "============================================================"
 
 # ---------- 自動開啟瀏覽器分頁：抖音 webUI + 聊天室（直接進房號 $ROOM）----------
