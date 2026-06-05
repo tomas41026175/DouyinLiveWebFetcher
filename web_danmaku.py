@@ -783,6 +783,10 @@ PAGE = r"""<!DOCTYPE html>
   .row.hl{ background:var(--hl-color,rgba(245,190,50,.22))!important; box-shadow:inset 3px 0 0 var(--hl-edge,#f0b400); }
   #hlInput{ background:#10131a; color:#e6e6e6; border:1px solid #2a2f3a; border-radius:6px; padding:5px 8px; font-size:13px; }
   #hlColor{ width:30px; height:28px; padding:0; border:1px solid #2a2f3a; border-radius:6px; background:#10131a; cursor:pointer; vertical-align:middle; }
+  .roomchip{ display:inline-flex; align-items:center; gap:2px; background:#1f3a2e; color:#9fe6c0; border-radius:10px; padding:1px 3px 1px 8px; margin:0 2px; font-size:12px; }
+  .roomchip-x{ background:none; border:none; color:#9fe6c0; cursor:pointer; font-size:14px; line-height:1; padding:0 2px; }
+  .roomchip-x:hover{ color:#ff6b6b; }
+  #roomChips:empty::after{ content:'（暂无房号）'; color:#5d6677; font-size:12px; }
 </style>
 </head>
 <body>
@@ -819,6 +823,15 @@ PAGE = r"""<!DOCTYPE html>
   <input id="hlInput" placeholder="高亮關鍵字（逗號分隔）" style="width:150px;" autocomplete="off" />
   <input id="hlColor" type="color" value="#f0b400" title="高亮顏色" />
   <button class="ghost" id="addBtn">＋ 添加窗口</button>
+  <span class="spacer"></span>
+  <select id="roomModeSel" title="聊天室监看模式"><option value="multi">多房监看</option><option value="single">单房</option></select>
+  <button class="ghost" id="addRoomPanelBtn" title="开一个聊天室监看分区">＋ 聊天室分区</button>
+  <button class="ghost" id="tileRoomsBtn" title="为每个监看房号各开一个分区">⊞ 每房分区</button>
+  <span class="pill" style="background:#1f3a2e;">监看房号
+    <input id="watchRoomInput" placeholder="房号" style="width:72px;" />
+    <button class="ghost" id="addWatchRoomBtn" title="添加房号到监看清单">＋</button>
+    <span id="roomChips"></span>
+  </span>
 </header>
 <div id="board"></div>
 <footer>本机运行 · 可保存/切换房间、添加多个窗口并各自选择显示内容 · 完全结束请在控制台按 Ctrl+C</footer>
@@ -888,6 +901,7 @@ PAGE = r"""<!DOCTYPE html>
     }
     if (p.type === 'all'){ if (ev.type === 'like') return false; }   // 全部不含点赞（太频繁）
     else if (p.type !== ev.type) return false;
+    if (p.type === 'roomchat' && p.room && p.room !== 'all' && ev.room !== p.room) return false; // 聊天室按房号分流（all=不过滤）
     if (p.kw){
       var hay = (ev.name||'') + ' ' + (ev.text||'');
       if (hay.indexOf(p.kw) === -1) return false;
@@ -1039,6 +1053,33 @@ PAGE = r"""<!DOCTYPE html>
     p._statsTimer = setInterval(function(){ loadStats(p); }, 15000);
   }
 
+  // ── 聊天室監看房號清單（手動添加 + 動態收集，存 localStorage('dy_watch_rooms')）──
+  let knownRooms = [];
+  try { const wr = JSON.parse(localStorage.getItem('dy_watch_rooms')); if (wr && wr.length) knownRooms = wr.slice(); } catch(e){}
+  function saveWatchRooms(){ try { localStorage.setItem('dy_watch_rooms', JSON.stringify(knownRooms)); } catch(e){} }
+  function buildRoomOptions(selEl, selected){
+    selEl.innerHTML = '';
+    const optAll = document.createElement('option'); optAll.value='all'; optAll.textContent='全部'; selEl.appendChild(optAll);
+    knownRooms.forEach(function(r){ const o=document.createElement('option'); o.value=r; o.textContent=r; selEl.appendChild(o); });
+    if (selected && selected!=='all' && knownRooms.indexOf(selected)===-1){ const o=document.createElement('option'); o.value=selected; o.textContent=selected; selEl.appendChild(o); }
+    selEl.value = selected || 'all';
+  }
+  function refreshRoomSelectors(){ panels.forEach(function(p){ if (p.roomSel) buildRoomOptions(p.roomSel, p.room); }); }
+  function renderRoomChips(){
+    const box = document.getElementById('roomChips'); if (!box) return;
+    box.innerHTML = '';
+    knownRooms.forEach(function(r){
+      const chip = document.createElement('span'); chip.className='roomchip'; chip.textContent = r;
+      const x = document.createElement('button'); x.className='roomchip-x'; x.textContent='×'; x.title='从监看清单移除';
+      x.addEventListener('click', function(){ knownRooms = knownRooms.filter(function(k){ return k!==r; }); saveWatchRooms(); refreshRoomSelectors(); renderRoomChips(); });
+      chip.appendChild(x); box.appendChild(chip);
+    });
+  }
+  function collectRoom(r){
+    if (!r || knownRooms.indexOf(r) !== -1) return;
+    knownRooms.push(r); saveWatchRooms(); refreshRoomSelectors(); renderRoomChips();
+  }
+
   function addPanel(cfg){
     cfg = cfg || {type:'all', kw:''};
     const el = document.createElement('div'); el.className = 'panel';
@@ -1046,6 +1087,9 @@ PAGE = r"""<!DOCTYPE html>
     const sel = document.createElement('select');
     TYPES.forEach(function(o){ const op=document.createElement('option');
       op.value=o.v; op.textContent=o.t; if(o.v===cfg.type) op.selected=true; sel.appendChild(op); });
+    const roomSel = document.createElement('select'); roomSel.className='proom'; roomSel.title='聊天室房号（仅聊天室类型）';
+    buildRoomOptions(roomSel, cfg.room||'all');
+    roomSel.style.display = (cfg.type === 'roomchat') ? '' : 'none';
     const kw = document.createElement('input'); kw.placeholder='关键字（可空）'; kw.value=cfg.kw||'';
     if (cfg.type === 'user') kw.placeholder = '用户名（必填）';
     const ex = document.createElement('input'); ex.className='pex'; ex.placeholder='排除词（空格分隔）'; ex.value=cfg.ex||'';
@@ -1058,14 +1102,15 @@ PAGE = r"""<!DOCTYPE html>
     fontGroup.appendChild(flabel); fontGroup.appendChild(fminus); fontGroup.appendChild(fsize); fontGroup.appendChild(fplus);
     const close = document.createElement('button'); close.className='pclose'; close.textContent='×'; close.title='关闭窗口';
     const feed = document.createElement('div'); feed.className='panel-feed';
-    head.appendChild(sel); head.appendChild(kw); head.appendChild(ex); head.appendChild(cnt);
+    head.appendChild(sel); head.appendChild(roomSel); head.appendChild(kw); head.appendChild(ex); head.appendChild(cnt);
     head.appendChild(fontGroup); head.appendChild(close);
     el.appendChild(head); el.appendChild(feed);
     board.appendChild(el);
 
-    const p = {type:cfg.type, kw:cfg.kw||'', ex:cfg.ex||'', width:(cfg.width||defaultWidth),
+    const p = {type:cfg.type, kw:cfg.kw||'', ex:cfg.ex||'', room:(cfg.room||'all'), width:(cfg.width||defaultWidth),
                height:(cfg.height||defaultHeight), fs:(cfg.fs||fontSize),
                el:el, feed:feed, countEl:cnt, count:0, tally:{}};
+    p.roomSel = roomSel;
     panels.push(p);
     applyPanelSize(p);
     function applyPanelFont(){ el.style.setProperty('--dfs', p.fs + 'px'); fsize.textContent = p.fs; }
@@ -1082,8 +1127,9 @@ PAGE = r"""<!DOCTYPE html>
       ro.observe(el);
     }
     sel.addEventListener('change', function(){
-      p.type = sel.value; save(); rebuildPanels();   // 切换类型重建（统计窗口需特殊界面）
+      p.type = sel.value; roomSel.style.display = (p.type==='roomchat')?'':'none'; save(); rebuildPanels();   // 切换类型重建（统计窗口需特殊界面）
     });
+    roomSel.addEventListener('change', function(){ p.room = roomSel.value; rerender(p); save(); }); // 聊天室分区切房号
     let kwTimer;
     kw.addEventListener('input', function(){ clearTimeout(kwTimer);
       kwTimer=setTimeout(function(){ p.kw=kw.value.trim(); rerender(p); save(); }, 250); });
@@ -1103,7 +1149,7 @@ PAGE = r"""<!DOCTYPE html>
   function panelsKey(){ return 'dy_panels:' + (curRoom || 'default'); }
 
   function currentCfgs(){
-    return panels.map(function(p){ return {type:p.type, kw:p.kw, ex:p.ex, width:p.width, height:p.height, fs:p.fs}; });
+    return panels.map(function(p){ return {type:p.type, kw:p.kw, ex:p.ex, room:p.room, width:p.width, height:p.height, fs:p.fs}; });
   }
   function getTemplate(){
     try { const t = JSON.parse(localStorage.getItem('dy_template')); if (t && t.length) return t; } catch(e){}
@@ -1144,6 +1190,7 @@ PAGE = r"""<!DOCTYPE html>
       loadRooms();
       return;
     }
+    if (ev.type === 'roomchat' && ev.room) collectRoom(ev.room); // 動態收集聊天室房號
     buffer.push(ev); if (buffer.length > MAXBUF) buffer.shift();
     panels.forEach(function(p){
       if (p.type === 'stats') return;   // 统计窗口从服务器拉取，不接收实时事件
@@ -1301,6 +1348,29 @@ PAGE = r"""<!DOCTYPE html>
     save();
   });
 
+  // ── 聊天室監看：模式切換 + 房號管理 init ──
+  let roomMode = 'multi';
+  try { const m = localStorage.getItem('dy_room_mode'); if (m) roomMode = m; } catch(e){}
+  function applyRoomMode(){
+    const ms = document.getElementById('roomModeSel'); if (ms) ms.value = roomMode;
+    const tb = document.getElementById('tileRoomsBtn'); if (tb) tb.style.display = (roomMode==='multi') ? '' : 'none';
+  }
+  document.getElementById('roomModeSel').addEventListener('change', function(){
+    roomMode = this.value; try { localStorage.setItem('dy_room_mode', roomMode); } catch(e){} applyRoomMode();
+  });
+  document.getElementById('addRoomPanelBtn').addEventListener('click', function(){ addPanel({type:'roomchat', room:'all'}); save(); });
+  document.getElementById('tileRoomsBtn').addEventListener('click', function(){
+    if (!knownRooms.length){ alert('尚无房号，可手动添加或等聊天室訊息进来'); return; }
+    knownRooms.forEach(function(r){ addPanel({type:'roomchat', room:r}); }); save();
+  });
+  document.getElementById('addWatchRoomBtn').addEventListener('click', function(){
+    const inp = document.getElementById('watchRoomInput'); const v = (inp.value||'').trim().slice(0,32); if (!v) return;
+    if (knownRooms.indexOf(v) === -1){ knownRooms.push(v); saveWatchRooms(); refreshRoomSelectors(); renderRoomChips(); }
+    inp.value = '';
+  });
+  document.getElementById('watchRoomInput').addEventListener('keydown', function(e){ if (e.key==='Enter') document.getElementById('addWatchRoomBtn').click(); });
+  renderRoomChips(); applyRoomMode();
+
   const es = new EventSource('/stream');
   es.onopen = function(){ document.getElementById('dot').classList.remove('off');
                           document.getElementById('status').textContent='已连接'; };
@@ -1380,6 +1450,8 @@ class Handler(BaseHTTPRequestHandler):
                 ev_type = "roomchat"
             label = f"[{room}] {name}" if room else name
             ev = {"type": ev_type, "name": label, "text": text}
+            if room:
+                ev["room"] = room  # 獨立 room 欄位供前端按房號分流（保留 label 維持單房顯示零回歸）
             # 貼圖：僅接受本機 chatroom 的貼圖 URL，避免任意外部 URL 注入 webUI
             sticker_url = str(data.get("sticker_url", "")).strip()
             if re.match(r'^http://127\.0\.0\.1:\d+/stickers/', sticker_url):
