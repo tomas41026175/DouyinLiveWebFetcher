@@ -3,32 +3,33 @@
 
 ---
 
-## 🔗 整合版：聊天室 + 一鍵啟動 + 自動更新（v1.0.3）
+## 🔗 整合版：抖音彈幕 × 多人聊天室（雲端部署）
 
-本分支在原專案上整合了多人聊天室（`chatroom/`），與抖音彈幕**雙向互通**：
-- 聊天室房間訊息 → 顯示在抖音 webUI 的「聊天室」視窗
-- 抖音彈幕 → 注入聊天室（彈幕在上、對話在下、可拖拉調整占比）
+本分支在原專案上整合多人聊天室（`chatroom/`），與抖音彈幕**雙向互通**，並**整份部署到海外 VPS**（24/7、本機免開、中國可直連）。
 
-### 一鍵啟動（建議用 git clone，才有自動更新）
+### 功能
+- **聊天室公網**：朋友連 `http://<VPS_IP>/?room=123456` 直接進房（自有 VPS IP，中國可連）
+- **雙向鏡像**：抖音彈幕 → 聊天室上方彈幕流；房間訊息/貼圖 → 抖音 webUI 同步顯示
+- **分享 QR**：聊天室「分享」鈕產生 QR，掃碼進房（QR lib 內嵌、不走 CDN）
+- **貼圖**：`/admin` 登入式管理頁，批量上傳（多選 / 拖拉）、自動壓縮、可改密碼；聊天室與彈幕流都顯示貼圖
+- **改暱稱**：房內可改，首次掃碼進房（訪客）自動提示
+- **彈幕分類過濾**：聊天 / 禮物 / 進場 / 關注 / 讚 / 聊天室，chips 勾選顯示
+- **cache 對話**：當天訊息保留（重整 / 重連可見），UTC+8 每日重置
 
+### 雲端部署（生產）
+整份專案（`web_danmaku` + `chatroom`）部署到海外 VPS、systemd 常駐。
+- 手動部署步驟：見 **[deploy/cloud-deploy.md](./deploy/cloud-deploy.md)**
+- 自動部署：push `main` 觸發 GitHub Actions（需在 repo Settings 設 `VPS_SSH_KEY` / `VPS_HOST` secret）
+
+### 本機開發測試
 ```bash
 git clone https://github.com/tomas41026175/DouyinLiveWebFetcher.git
 cd DouyinLiveWebFetcher
-./start_all.sh        # mac / Linux
-start_all.bat         # Windows（直接雙擊亦可）
+./start_all.sh        # 本機跑兩服務（localhost，不對外）
 ```
 
-腳本會自動：檢測並安裝環境（Python venv + 依賴、Node 依賴、`cloudflared`）→ 啟動兩個服務 → 建立 **Cloudflare 公網隧道** → 自動開啟兩個瀏覽器分頁：
-
-- **聊天室**（Cloudflare 公網網址，分享給朋友、中國可連，**直接進房號 `123456`**）
-- **抖音弹幕 webUI**（`http://127.0.0.1:8765`，密碼見 `ui_password.txt`，預設 `0425`）
-
-### 自動更新
-
-每次啟動會 `git fetch` 比對遠端，**發現新版自動 `git pull --ff-only` 並以新版重啟**（需以 git clone 部署；本地若有改動則跳過不強制）。
-
-> 完整整合說明（架構、雙向資料流、注意事項）見 **[docs/INTEGRATION.md](./docs/INTEGRATION.md)**。
-> 環境需求 `mini_racer` 等已在 Python 3.14 + Apple Silicon 實測可裝。
+> 完整架構與雙向資料流見 **[docs/INTEGRATION.md](./docs/INTEGRATION.md)**。
+> ⚠️ 原本的 trycloudflare 隧道在中國被 GFW 封鎖，已改用自有 VPS（見 deploy 文件）。`mini_racer` 等依賴在 Python 3.12 / 3.14 實測可裝。
 
 ---
 

@@ -9,6 +9,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
     steps:
       - uses: actions/checkout@v4
 
@@ -17,22 +19,23 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy chatroom（保留 VPS 上的貼圖與 node_modules）
         run: |
+          HOST=$(printf '%s' "$VPS_HOST" | tr -d '[:space:]')
           rsync -az --delete \
             --exclude node_modules --exclude stickers \
-            -e "ssh -i ~/.ssh/id_ed25519" \
-            chatroom/ root@${{ secrets.VPS_HOST }}:/root/chatroom/
-          ssh -i ~/.ssh/id_ed25519 root@${{ secrets.VPS_HOST }} \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
+            chatroom/ "root@${HOST}:/root/chatroom/"
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no "root@${HOST}" \
             "cd /root/chatroom && npm install --omit=dev >/dev/null 2>&1; systemctl restart chatroom"
 
       - name: Deploy web_danmaku（只同步程式碼，保留 .env / venv / 統計）
         run: |
-          rsync -az -e "ssh -i ~/.ssh/id_ed25519" \
+          HOST=$(printf '%s' "$VPS_HOST" | tr -d '[:space:]')
+          rsync -az -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
             web_danmaku.py liveMan.py a_bogus.js sign.js sign_v0.js webmssdk.js \
             ac_signature.py gift_names.json requirements.txt protobuf \
-            root@${{ secrets.VPS_HOST }}:/root/danmaku/
-          ssh -i ~/.ssh/id_ed25519 root@${{ secrets.VPS_HOST }} \
+            "root@${HOST}:/root/danmaku/"
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no "root@${HOST}" \
             "systemctl restart danmaku"
