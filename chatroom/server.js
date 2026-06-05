@@ -335,13 +335,14 @@ const readJsonBody = (req, limit = 8 * 1024 * 1024) => new Promise((resolve, rej
   req.on('error', reject);
 });
 
-// 安全貼圖檔名：去路徑、限副檔名、清特殊字元
-const safeStickerName = (raw) => {
+// 副檔名由實際圖片格式(dataUrl MIME)決定，不依賴原檔名 → 放寬上傳（原檔無副檔名也行）
+const EXT_BY_MIME = { png: '.png', jpeg: '.jpg', jpg: '.jpg', gif: '.gif', webp: '.webp' };
+// 安全檔名主幹：去路徑、去原副檔名、清特殊字元（保留中英數與中文）
+const safeStickerStem = (raw) => {
   const base = String(raw || '').replace(/[/\\]/g, '').trim();
-  const ext = extname(base).toLowerCase();
-  if (!STICKER_EXTS.has(ext)) return null;
-  const stem = base.slice(0, base.length - ext.length).replace(/[^a-zA-Z0-9_一-龥-]/g, '_').slice(0, 60);
-  return `${stem || 'sticker'}${ext}`;
+  const dot = base.lastIndexOf('.');
+  const stem = (dot > 0 ? base.slice(0, dot) : base).replace(/[^a-zA-Z0-9_一-龥-]/g, '_').slice(0, 60);
+  return stem || 'sticker';
 };
 
 const checkAdmin = (body) => Boolean(adminPassword) && body && body.password === adminPassword;
@@ -350,11 +351,12 @@ const handleUpload = async (req, res) => {
   let body;
   try { body = await readJsonBody(req); } catch { return jsonRes(res, 400, { ok: false, err: '請求格式錯' }); }
   if (!checkAdmin(body)) return jsonRes(res, 403, { ok: false, err: '管理密碼錯誤' });
-  const name = safeStickerName(body.name);
-  if (!name) return jsonRes(res, 400, { ok: false, err: '檔名或格式不合（限 png/jpg/jpeg/gif/webp）' });
-  const m = /^data:image\/[a-zA-Z.+-]+;base64,(.+)$/.exec(String(body.dataUrl || ''));
+  const m = /^data:image\/([a-zA-Z.+-]+);base64,(.+)$/.exec(String(body.dataUrl || ''));
   if (!m) return jsonRes(res, 400, { ok: false, err: '圖片資料格式錯' });
-  const buf = Buffer.from(m[1], 'base64');
+  const ext = EXT_BY_MIME[m[1].toLowerCase()];
+  if (!ext) return jsonRes(res, 400, { ok: false, err: '不支援的圖片格式（限 png/jpg/gif/webp）' });
+  const name = `${safeStickerStem(body.name)}${ext}`;
+  const buf = Buffer.from(m[2], 'base64');
   if (buf.length === 0 || buf.length > MAX_STICKER_BYTES) return jsonRes(res, 400, { ok: false, err: '檔案為空或超過 5MB' });
   try {
     await mkdir(STICKERS_DIR, { recursive: true });
@@ -386,8 +388,15 @@ const handleChangePassword = async (req, res) => {
   catch { return jsonRes(res, 500, { ok: false, err: '寫入失敗' }); }
 };
 
+// 純驗證管理密碼（登入用，不做任何操作）
+const handleVerify = async (req, res) => {
+  let body; try { body = await readJsonBody(req); } catch { return jsonRes(res, 400, { ok: false }); }
+  return jsonRes(res, 200, { ok: checkAdmin(body) });
+};
+
 const httpServer = createServer((req, res) => {
   const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (req.method === 'POST' && pathname === '/stickers/verify') return handleVerify(req, res);
   if (req.method === 'POST' && pathname === '/stickers/upload') return handleUpload(req, res);
   if (req.method === 'POST' && pathname === '/stickers/delete') return handleDelete(req, res);
   if (req.method === 'POST' && pathname === '/stickers/password') return handleChangePassword(req, res);
