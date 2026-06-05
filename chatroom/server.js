@@ -301,7 +301,8 @@ const serveStatic = async (req, res) => {
     const file = await readFile(resolved);
     const ext = extname(resolved).toLowerCase();
     const headers = { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' };
-    if (ext === '.html') headers['Cache-Control'] = 'no-cache'; // html 不快取，更新重整即見
+    // html 即時更新（不快取）；js/圖片等內容穩定 → 快取 1 天，減少中國跨境重抓
+    headers['Cache-Control'] = ext === '.html' ? 'no-cache' : 'public, max-age=86400';
     const acceptsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
     if (COMPRESSIBLE_EXTS.has(ext) && acceptsGzip) {
       headers['Content-Encoding'] = 'gzip';
@@ -331,7 +332,7 @@ const serveSticker = async (pathname, res) => {
   try {
     const file = await readFile(resolved);
     const mime = MIME_TYPES[extname(resolved).toLowerCase()] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime }).end(file);
+    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=604800' }).end(file); // 貼圖內容穩定，快取 7 天（反覆出現不重抓）
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
   }
