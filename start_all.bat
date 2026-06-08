@@ -87,6 +87,7 @@ start "抖音弹幕 web_danmaku (勿關)" cmd /k ""%VPY%" web_danmaku.py"
 set "PORT=%CHAT_PORT%"
 set "DANMAKU_URL=http://127.0.0.1:%DANMAKU_PORT%"
 set "DANMAKU_PASSWORD=%PW%"
+set "STICKER_ADMIN_PASSWORD=%PW%"
 start "聊天室 chatroom (勿關)" cmd /k "node chatroom\server.js"
 
 echo ==^> [5/5] 建立 Cloudflare 隧道（聊天室公網網址）

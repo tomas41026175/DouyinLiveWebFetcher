@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 
 [ -d node_modules ] || npm install
 
-node server.js &
+STICKER_ADMIN_PASSWORD="${STICKER_ADMIN_PASSWORD:-0425}" node server.js &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 sleep 1
