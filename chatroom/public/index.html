@@ -741,6 +741,8 @@
         banner(msg, true);
         els.joinBtn.disabled = false; els.createBtn.disabled = false;
       },
+      // 貼圖被 admin 上傳/移除 → 伺服器廣播，即時刷新貼圖面板（免重整頁面）
+      stickers_updated: () => loadStickers(),
     };
 
     // ---- WebSocket 連線 + 自動重連（中國長連線易被切）----

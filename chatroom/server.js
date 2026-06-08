@@ -378,6 +378,7 @@ const handleUpload = async (req, res) => {
   try {
     await mkdir(STICKERS_DIR, { recursive: true });
     await writeFile(join(STICKERS_DIR, name), buf);
+    broadcastStickerList();
     return jsonRes(res, 200, { ok: true, name });
   } catch { return jsonRes(res, 500, { ok: false, err: '寫入失敗' }); }
 };
@@ -389,7 +390,7 @@ const handleDelete = async (req, res) => {
   const list = await listStickers();
   const name = String(body.name || '');
   if (!list.includes(name)) return jsonRes(res, 404, { ok: false, err: '貼圖不存在' });
-  try { await unlink(join(STICKERS_DIR, name)); return jsonRes(res, 200, { ok: true }); }
+  try { await unlink(join(STICKERS_DIR, name)); broadcastStickerList(); return jsonRes(res, 200, { ok: true }); }
   catch { return jsonRes(res, 500, { ok: false, err: '刪除失敗' }); }
 };
 
@@ -462,6 +463,11 @@ const broadcastDanmaku = (ev) => {
   if (!ev || !DANMAKU_TYPES.has(ev.type)) return;
   const payload = { dtype: ev.type, name: ev.name || '', text: ev.text || '' };
   wss.clients.forEach((sock) => { if (sock.roomCode) send(sock, 'danmaku', payload); });
+};
+
+// 貼圖清單變動（admin 上傳/刪除）→ 通知所有在房 client 即時刷新貼圖面板（免重整）
+const broadcastStickerList = () => {
+  wss.clients.forEach((sock) => { if (sock.roomCode) send(sock, 'stickers_updated', {}); });
 };
 
 const connectDanmaku = () => {
