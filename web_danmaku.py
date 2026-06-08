@@ -945,10 +945,15 @@ PAGE = r"""<!DOCTYPE html>
   }
 
   function appendTo(p, ev){
-    p.feed.appendChild(makeRow(ev));
+    const row = makeRow(ev);
+    p.feed.appendChild(row);
     if (ev.type !== 'system'){ p.count++; p.countEl.textContent = p.count; }
     while (p.feed.children.length > MAXROWS) p.feed.removeChild(p.feed.firstChild);
-    if (document.getElementById('autoscroll').checked) p.feed.scrollTop = p.feed.scrollHeight;
+    const stick = function(){ if (document.getElementById('autoscroll').checked) p.feed.scrollTop = p.feed.scrollHeight; };
+    stick();
+    // 貼圖為非同步載入，append 當下高度尚未計入；載入完成後需再校正一次，否則自動滾動對貼圖無效
+    const img = row.querySelector('img.dy-sticker');
+    if (img && !img.complete) img.addEventListener('load', stick);
   }
 
   function renderRank(p){
