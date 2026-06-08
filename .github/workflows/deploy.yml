@@ -2,14 +2,14 @@ name: Deploy to VPS
 
 # push 到 main 自動部署到 VPS（需先在 repo Settings → Secrets 設定 VPS_SSH_KEY 與 VPS_HOST）
 on:
-  push:
-    branches: [main]
-    # 純文件變更（.md/.MD）不觸發部署，避免無謂的生產重啟。
-    # 只要 push 含任一非 .md 檔（code），仍照常部署；workflow_dispatch 可隨時手動強制部署。
-    paths-ignore:
-      - '**.md'
-      - '**.MD'
-  workflow_dispatch: {}
+  # ⏸ VPS 暫時關閉 → 停用 push 自動部署（避免貼圖自動 push 一直觸發部署）。
+  #   恢復 VPS 時，把下面 push 區塊取消註解即可重新啟用自動部署。
+  # push:
+  #   branches: [main]
+  #   paths-ignore:
+  #     - '**.md'
+  #     - '**.MD'
+  workflow_dispatch: {}   # 目前僅保留手動觸發（Actions 頁面 Run workflow）
 
 jobs:
   deploy:

@@ -7,7 +7,5 @@ npm-debug.log*
 .playwright-mcp/
 *.png
 
-# 貼圖檔不進 git（使用者本機放在 stickers/）；只保留資料夾與說明
-stickers/*
-!stickers/.gitkeep
-!stickers/README.md
+# 貼圖進 git（跨裝置 / GitHub 同步）；stickers/ 下的 png 需顯式 re-include 蓋過上面的全域 *.png
+!stickers/*.png

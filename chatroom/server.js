@@ -3,6 +3,8 @@ import { readFile, readdir, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -379,6 +381,7 @@ const handleUpload = async (req, res) => {
     await mkdir(STICKERS_DIR, { recursive: true });
     await writeFile(join(STICKERS_DIR, name), buf);
     broadcastStickerList();
+    scheduleGitSync();
     return jsonRes(res, 200, { ok: true, name });
   } catch { return jsonRes(res, 500, { ok: false, err: '寫入失敗' }); }
 };
@@ -390,7 +393,7 @@ const handleDelete = async (req, res) => {
   const list = await listStickers();
   const name = String(body.name || '');
   if (!list.includes(name)) return jsonRes(res, 404, { ok: false, err: '貼圖不存在' });
-  try { await unlink(join(STICKERS_DIR, name)); broadcastStickerList(); return jsonRes(res, 200, { ok: true }); }
+  try { await unlink(join(STICKERS_DIR, name)); broadcastStickerList(); scheduleGitSync(); return jsonRes(res, 200, { ok: true }); }
   catch { return jsonRes(res, 500, { ok: false, err: '刪除失敗' }); }
 };
 
@@ -468,6 +471,30 @@ const broadcastDanmaku = (ev) => {
 // 貼圖清單變動（admin 上傳/刪除）→ 通知所有在房 client 即時刷新貼圖面板（免重整）
 const broadcastStickerList = () => {
   wss.clients.forEach((sock) => { if (sock.roomCode) send(sock, 'stickers_updated', {}); });
+};
+
+// ── 貼圖 Git 同步：僅 STICKER_GIT_SYNC=1 時啟用（通常 Windows start_all.bat 設定）；debounce 合併連續變更後自動 commit+push ──
+const GIT_SYNC_ENABLED = process.env.STICKER_GIT_SYNC === '1';
+const GIT_SYNC_DEBOUNCE_MS = Number(process.env.STICKER_GIT_SYNC_MS) || 5000;
+const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url)); // chatroom/ 的上層 = git repo root
+const pexecFile = promisify(execFile);
+const git = (...args) => pexecFile('git', args, { cwd: REPO_ROOT });
+let gitSyncTimer = null;
+const runGitSync = async () => {
+  gitSyncTimer = null;
+  try {
+    await git('add', 'chatroom/stickers');
+    try { await git('diff', '--cached', '--quiet'); return; } // 無 staged 變更 → 跳過
+    catch { /* 有變更，往下提交 */ }
+    await git('commit', '-m', 'chore(stickers): 自動同步貼圖更新');
+    await git('push');
+    console.log('[git-sync] 貼圖已同步到 GitHub');
+  } catch (e) { console.warn('[git-sync] 同步失敗：', e.message); }
+};
+const scheduleGitSync = () => {
+  if (!GIT_SYNC_ENABLED) return;
+  if (gitSyncTimer) clearTimeout(gitSyncTimer);
+  gitSyncTimer = setTimeout(runGitSync, GIT_SYNC_DEBOUNCE_MS);
 };
 
 const connectDanmaku = () => {
