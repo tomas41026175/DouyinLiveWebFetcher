@@ -38,6 +38,9 @@
     .card img { width: 100%; height: 90px; object-fit: contain; }
     .card .nm { font-size: 11px; color: #6b6256; word-break: break-all; margin: 4px 0; }
     .card .del { background: #b1442f; color: #fff; border: none; border-radius: 6px; padding: 5px 8px; font-size: 12px; cursor: pointer; width: 100%; }
+    .prog { position: relative; height: 24px; background: #e3d9c8; border-radius: 8px; overflow: hidden; margin: 4px 0 10px; }
+    .prog-fill { height: 100%; width: 0; background: #c0673b; transition: width .25s ease; }
+    .prog-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #2e2a24; }
   </style>
 </head>
 <body>
@@ -55,11 +58,12 @@
 
     <!-- 管理區（驗證通過才顯示）-->
     <div id="adminBox" class="hidden">
-      <p class="hint">支援 png / jpg / gif / webp，單張 ≤ 5MB（上傳自動壓縮）。可多選或拖拉批量上傳。　<span class="link" id="logoutBtn">登出</span></p>
+      <p class="hint">支援 png / jpg / gif / webp，單張 ≤ 5MB（上傳自動壓縮）。可多選或拖拉，一次最多 20 張。　<span class="link" id="logoutBtn">登出</span></p>
       <div class="bar">
         <input type="file" id="file" accept="image/*" multiple />
         <button class="btn" id="uploadBtn" type="button">上傳</button>
       </div>
+      <div id="progWrap" class="prog hidden"><div id="progBar" class="prog-fill"></div><span id="progTxt" class="prog-txt"></span></div>
       <details class="chpw">
         <summary>🔑 修改管理密碼</summary>
         <div class="bar">
@@ -137,15 +141,23 @@
       fileToDataURL(f).then((d) => { img.src = d; });
     });
 
+    const MAX_BATCH = 20; // 一次最多上傳張數（要改數量改這裡）
     const uploadFiles = async (files) => {
       if (!currentPw) return say('請先登入', false);
       const imgs = files.filter((f) => !f.type || f.type.startsWith('image/'));
       if (!imgs.length) return say('請選擇圖片', false);
+      if (imgs.length > MAX_BATCH) return say(`一次最多 ${MAX_BATCH} 張，你選了 ${imgs.length} 張，請分批上傳`, false);
       let ok = 0, fail = 0;
+      const total = imgs.length;
       const btn = $('uploadBtn'); btn.disabled = true;
-      for (let i = 0; i < imgs.length; i += 1) {
+      const pWrap = $('progWrap'), pBar = $('progBar'), pTxt = $('progTxt');
+      const renderProg = (done) => {
+        pBar.style.width = Math.round((done / total) * 100) + '%';
+        pTxt.textContent = `${done}/${total}　✓${ok}${fail ? ` ✗${fail}` : ''}`;
+      };
+      pWrap.classList.remove('hidden'); pBar.style.width = '0%'; renderProg(0);
+      for (let i = 0; i < total; i += 1) {
         const f = imgs[i];
-        say(`上傳中… ${i + 1}/${imgs.length}`, true);
         try {
           const dataUrl = await compressImage(f);
           const r = await fetch('/stickers/upload', {
@@ -155,13 +167,20 @@
           const j = await r.json();
           if (j.ok) ok += 1; else { fail += 1; say(`「${f.name}」失敗：${j.err || '未知錯誤'}`, false); }
         } catch { fail += 1; }
+        renderProg(i + 1);
       }
       btn.disabled = false; $('file').value = '';
-      say(`完成：成功 ${ok} 張${fail ? `，失敗 ${fail}` : ''}`, fail === 0);
+      say(`完成：成功 ${ok} 張${fail ? `，失敗 ${fail} 張` : ''}`, fail === 0);
+      setTimeout(() => pWrap.classList.add('hidden'), fail ? 4000 : 1500);
       load();
     };
     $('uploadBtn').onclick = () => uploadFiles([...$('file').files]);
-    $('file').onchange = () => { const n = $('file').files.length; if (n) say(`已選 ${n} 張，點「上傳」開始（可一次選多張）`, true); };
+    $('file').onchange = () => {
+      const n = $('file').files.length;
+      if (!n) return;
+      if (n > MAX_BATCH) say(`已選 ${n} 張，超過上限 ${MAX_BATCH} 張，請重新選擇`, false);
+      else say(`已選 ${n} 張，點「上傳」開始`, true);
+    };
     // 拖拉批量上傳（登入後拖圖片到頁面任一處）
     ['dragover', 'dragenter'].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault()));
     document.addEventListener('drop', (e) => {
