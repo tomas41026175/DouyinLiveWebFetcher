@@ -94,7 +94,7 @@ trap cleanup EXIT INT TERM
 
 ( cd "$ROOT" && DY_NO_AUTOCLOSE=1 DY_NO_BROWSER=1 "$VPY" web_danmaku.py >/dev/null 2>&1 ) &
 PIDS+=($!)
-( cd "$CHATROOM" && PORT=$CHAT_PORT DANMAKU_URL="http://127.0.0.1:$DANMAKU_PORT" DANMAKU_PASSWORD="$PASSWORD" STICKER_ADMIN_PASSWORD="$PASSWORD" node server.js >/dev/null 2>&1 ) &
+( cd "$CHATROOM" && PORT=$CHAT_PORT DANMAKU_URL="http://127.0.0.1:$DANMAKU_PORT" DANMAKU_PASSWORD="$PASSWORD" STICKER_ADMIN_PASSWORD="$PASSWORD" STICKER_GIT_POLL=1 node server.js >/dev/null 2>&1 ) &
 PIDS+=($!)
 sleep 3
 

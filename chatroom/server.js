@@ -497,6 +497,30 @@ const scheduleGitSync = () => {
   gitSyncTimer = setTimeout(runGitSync, GIT_SYNC_DEBOUNCE_MS);
 };
 
+// ── 背景輪詢 GitHub：偵測到更新就 pull；貼圖變更直接 hot reload 前端（STICKER_GIT_POLL=1 啟用）──
+const GIT_POLL_ENABLED = process.env.STICKER_GIT_POLL === '1';
+const GIT_POLL_MS = Number(process.env.STICKER_GIT_POLL_MS) || 60000; // 預設 60s
+let gitPolling = false;
+const pollGitUpdate = async () => {
+  if (gitPolling) return; // 上一輪未跑完就跳過，避免重疊
+  gitPolling = true;
+  try {
+    await git('fetch', '--quiet');
+    const [{ stdout: local }, { stdout: remote }] = await Promise.all([git('rev-parse', 'HEAD'), git('rev-parse', '@{u}')]);
+    if (local.trim() === remote.trim()) return; // 已是最新
+    const { stdout: changed } = await git('diff', '--name-only', 'HEAD', '@{u}');
+    await git('pull', '--ff-only', '--quiet');
+    if (/chatroom\/stickers\//.test(changed)) {
+      broadcastStickerList(); // 貼圖變更 → 前端面板熱刷新（免重整、免重啟）
+      console.log('[git-poll] 偵測到貼圖更新，已 pull + hot reload');
+    } else {
+      console.log('[git-poll] 偵測到更新並已 pull（含 code，需重啟 server 才生效）');
+    }
+  } catch { /* fetch/pull 失敗（離線 / 本地未提交 / 非 ff）靜默，下一輪再試 */ }
+  finally { gitPolling = false; }
+};
+if (GIT_POLL_ENABLED) { const t = setInterval(pollGitUpdate, GIT_POLL_MS); t.unref(); }
+
 const connectDanmaku = () => {
   if (!DANMAKU_URL) return; // 獨立啟動（無抖音）時不訂閱
   let url;
