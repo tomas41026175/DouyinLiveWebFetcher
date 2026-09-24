@@ -51,6 +51,10 @@ cd DouyinLiveWebFetcher
 ./start_all.sh        # 本機跑兩服務（localhost，不對外）
 ```
 
+```bash
+python -m unittest discover -s tests -v   # web_danmaku 單元測試（音浪統計 / 連擊去重 / 密碼驗證開關）
+```
+
 > 完整架構與雙向資料流見 **[docs/INTEGRATION.md](./docs/INTEGRATION.md)**。
 > ⚠️ 原本的 trycloudflare 隧道在中國被 GFW 封鎖，已改用自有 VPS（見 deploy 文件）。`mini_racer` 等依賴在 Python 3.12 / 3.14 實測可裝。
 
