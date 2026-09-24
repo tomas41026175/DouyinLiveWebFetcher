@@ -27,13 +27,15 @@ from protobuf.douyin import (
     LikeMessage, RoomUserSeqMessage, PushFrame, Response,
 )
 
-VERSION = "v1.9 (2026-05-31) 指定用户窗口"   # 每次更新都会变化，可用于确认已是最新版
+VERSION = "v1.10 (2026-09-24) 今日音浪 + config 启动设定"   # 每次更新都会变化，可用于确认已是最新版
 PORT = 8765
 ENV_PATH = ".env"
 ROOMS_PATH = "rooms.json"
 STATS_DIR = "stats"
 GIFT_NAMES_PATH = "gift_names.json"
 PW_PATH = "ui_password.txt"
+CONFIG_PATH = "config.json"         # 啟動設定（services / auth），與 start_all 腳本共用
+GIFT_DIAMONDS_PATH = "gift_diamonds.json"   # 礼物 id -> 单价（音浪/抖币）
 CHAT_URL_FILE = "chatroom_url.txt"   # 啟動腳本寫入聊天室的 Cloudflare 公網網址
 DEFAULT_PASSWORD = "0425"
 AUTH_PASSWORD = ""
@@ -202,6 +204,28 @@ def load_gift_names():
             pass
 
 
+_gift_diamonds = {}   # id -> 单价（音浪），来自礼物清单或 GiftMessage.gift.diamond_count
+
+
+def load_gift_diamonds():
+    global _gift_diamonds
+    try:
+        with open(GIFT_DIAMONDS_PATH, encoding="utf-8") as f:
+            d = json.load(f)
+            if isinstance(d, dict):
+                _gift_diamonds = {str(k): int(v) for k, v in d.items()}
+    except Exception:
+        pass
+
+
+def save_gift_diamonds():
+    try:
+        with open(GIFT_DIAMONDS_PATH, "w", encoding="utf-8") as f:
+            json.dump(_gift_diamonds, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
 def save_gift_names():
     try:
         with open(GIFT_NAMES_PATH, "w", encoding="utf-8") as f:
@@ -325,6 +349,24 @@ def clean_room_id(raw):
     return nums[-1] if nums else raw.strip()
 
 
+def load_config():
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def auth_enabled():
+    # 优先环境变量 DY_AUTH=0/1；其次 config.json 的 auth.enabled；默认开启
+    env = os.environ.get("DY_AUTH", "").strip().lower()
+    if env:
+        return env not in ("0", "false", "no", "off")
+    auth = load_config().get("auth") or {}
+    return bool(auth.get("enabled", True)) if isinstance(auth, dict) else True
+
+
 def load_password():
     # 优先环境变量；其次 ui_password.txt；否则用默认密码并写入文件
     p = os.environ.get("DY_UI_PASSWORD", "").strip()
@@ -441,7 +483,9 @@ def _load_room_stats(room):
 
 def _stat_rec(rs, user, date):
     u = rs.setdefault(user, {})
-    return u.setdefault(date, {"likes": 0, "gifts": 0, "items": {}})
+    rec = u.setdefault(date, {"likes": 0, "gifts": 0, "items": {}})
+    rec.setdefault("diamonds", 0)   # 旧统计文件无此字段
+    return rec
 
 
 def record_like(room, user, cnt):
@@ -454,13 +498,14 @@ def record_like(room, user, cnt):
         _stats_dirty.add(room)
 
 
-def record_gift(room, user, gift, cnt):
+def record_gift(room, user, gift, cnt, diamonds=0):
     if not room:
         return
     rs = _load_room_stats(room)
     with _stats_lock:
         rec = _stat_rec(rs, user or "?", _today())
         rec["gifts"] += int(cnt or 0)
+        rec["diamonds"] += int(diamonds or 0)
         g = gift or "礼物"
         rec["items"][g] = rec["items"].get(g, 0) + int(cnt or 0)
         _stats_dirty.add(room)
@@ -493,8 +538,8 @@ def _stats_flusher():
 
 def stats_for_date(room, date):
     rs = _load_room_stats(room)
-    likes_total = gifts_total = 0
-    gift_items, gift_users, like_users = {}, {}, {}
+    likes_total = gifts_total = diamonds_total = 0
+    gift_items, gift_users, like_users, diamond_users = {}, {}, {}, {}
     with _stats_lock:
         for user, bydate in rs.items():
             rec = bydate.get(date)
@@ -502,16 +547,21 @@ def stats_for_date(room, date):
                 continue
             lk = rec.get("likes", 0)
             gf = rec.get("gifts", 0)
+            dm = rec.get("diamonds", 0)
             likes_total += lk
             gifts_total += gf
+            diamonds_total += dm
             if gf:
                 gift_users[user] = gf
+            if dm:
+                diamond_users[user] = dm
             if lk:
                 like_users[user] = lk
             for g, c in rec.get("items", {}).items():
                 gift_items[g] = gift_items.get(g, 0) + c
     return {"room": room, "date": date, "likes_total": likes_total, "gifts_total": gifts_total,
-            "gift_items": gift_items, "gift_users": gift_users, "like_users": like_users}
+            "diamonds_total": diamonds_total, "gift_items": gift_items, "gift_users": gift_users,
+            "like_users": like_users, "diamond_users": diamond_users}
 
 
 def stats_dates(room):
@@ -595,8 +645,12 @@ class WebFetcher(DouyinLiveWebFetcher):
             if gid is not None and name:
                 _gift_names[str(gid)] = name
                 cnt += 1
+            dc = g.get('diamond_count')
+            if gid is not None and isinstance(dc, int) and dc > 0:
+                _gift_diamonds[str(gid)] = dc
         if cnt:
             save_gift_names()
+            save_gift_diamonds()
             if DIAG:
                 print(f"[礼物清单] 已载入 {cnt} 个礼物名称")
 
@@ -606,8 +660,9 @@ class WebFetcher(DouyinLiveWebFetcher):
             return
         self._ensure_gift_list()
         gname = _gift_names.get(str(gid)) or f"礼物#{gid}"
-        broadcast({"type": "gift", "name": gname, "text": "×1", "gift_id": gid})
-        record_gift(self.live_id, "(匿名礼物)", gname, 1)
+        diamonds = _gift_diamonds.get(str(gid), 0)
+        broadcast({"type": "gift", "name": gname, "text": "×1", "gift_id": gid, "diamonds": diamonds})
+        record_gift(self.live_id, "(匿名礼物)", gname, 1, diamonds)
 
     def _parseRankMsg(self, payload): pass
     def _parseRoomStatsMsg(self, payload): pass
@@ -657,8 +712,40 @@ class WebFetcher(DouyinLiveWebFetcher):
             gift_name = "礼物"
         cnt = (getattr(m, "combo_count", 0) or getattr(m, "total_count", 0)
                or getattr(m, "repeat_count", 0) or getattr(m, "group_count", 0) or 1)
-        broadcast({"type": "gift", "name": name, "text": f"送出 {gift_name} x{cnt}"})
-        record_gift(self.live_id, name, gift_name, cnt)
+        gid = getattr(m, "gift_id", 0) or (m.gift.id if m.gift else 0)
+        unit = 0
+        try:
+            unit = int(m.gift.diamond_count or 0) if m.gift else 0
+        except Exception:
+            unit = 0
+        if unit and gid and _gift_diamonds.get(str(gid)) != unit:
+            _gift_diamonds[str(gid)] = unit
+            save_gift_diamonds()
+        if not unit and gid:
+            unit = _gift_diamonds.get(str(gid), 0)
+        # 连击礼物会重复推送（x1, x2, x3…同一 group_id），统计只计增量，避免重复累加
+        added = self._combo_delta(m, gid, cnt)
+        diamonds = unit * added
+        broadcast({"type": "gift", "name": name, "text": f"送出 {gift_name} x{cnt}",
+                   "diamonds": diamonds})
+        if added:
+            record_gift(self.live_id, name, gift_name, added, diamonds)
+
+    def _combo_delta(self, m, gid, cnt):
+        group_id = getattr(m, "group_id", 0) or 0
+        if not group_id:
+            return cnt
+        try:
+            uid = m.user.id if m.user else 0
+        except Exception:
+            uid = 0
+        seen = getattr(self, "_combo_seen", None)
+        if seen is None or len(seen) > 5000:
+            seen = self._combo_seen = {}
+        key = (uid, gid, group_id)
+        last = seen.get(key, 0)
+        seen[key] = max(cnt, last)
+        return cnt - last if cnt > last else 0
 
     def _parseMemberMsg(self, payload):
         m = MemberMessage().parse(payload)
@@ -798,6 +885,7 @@ PAGE = r"""<!DOCTYPE html>
   <span class="pill"><span id="dot" class="dot off"></span><span id="status">连接中…</span></span>
   <span class="pill">房间 <b id="room">-</b></span>
   <span class="pill">在线 <b id="online">-</b></span>
+  <span class="pill" title="今日礼物价值总计（音浪），按服务器日期统计">今日音浪 <b id="diamondsToday" style="color:#ffcf66;">-</b></span>
   <select id="savedRooms" title="已保存房间"><option value="">已保存房间 ▼</option></select>
   <button class="ghost" id="editRoomBtn" title="编辑所选房间">✏ 编辑</button>
   <button class="ghost" id="delRoomBtn" title="删除所选房间">🗑</button>
@@ -1005,9 +1093,11 @@ PAGE = r"""<!DOCTYPE html>
     var gi = Object.keys(s.gift_items||{}).map(function(k){return [k,s.gift_items[k]];}).sort(function(a,b){return b[1]-a[1];});
     var gu = Object.keys(s.gift_users||{}).map(function(k){return [k,s.gift_users[k]];}).sort(function(a,b){return b[1]-a[1];});
     var lu = Object.keys(s.like_users||{}).map(function(k){return [k,s.like_users[k]];}).sort(function(a,b){return b[1]-a[1];});
-    var h = '<div class="stat-sum">点赞总数 <b>'+(s.likes_total||0)+'</b>　礼物总数 <b>'+(s.gifts_total||0)+'</b></div>';
+    var du = Object.keys(s.diamond_users||{}).map(function(k){return [k,s.diamond_users[k]];}).sort(function(a,b){return b[1]-a[1];});
+    var h = '<div class="stat-sum">音浪总计 <b>'+(s.diamonds_total||0)+'</b>　点赞总数 <b>'+(s.likes_total||0)+'</b>　礼物总数 <b>'+(s.gifts_total||0)+'</b></div>';
+    h += '<div class="stat-h">音浪排行</div>' + statListHtml(du, 30);
     h += '<div class="stat-h">礼物明细</div>' + statListHtml(gi, 50);
-    h += '<div class="stat-h">送礼排行</div>' + statListHtml(gu, 30);
+    h += '<div class="stat-h">送礼排行（件数）</div>' + statListHtml(gu, 30);
     h += '<div class="stat-h">点赞排行</div>' + statListHtml(lu, 30);
     p.statsBox.innerHTML = h;
   }
@@ -1020,7 +1110,7 @@ PAGE = r"""<!DOCTYPE html>
       var bydate = u[name]; var dates = Object.keys(bydate).sort().reverse();
       dates.forEach(function(d){
         var r = bydate[d];
-        h += '<div class="stat-row"><span>'+d+'</span><span class="stat-n">赞'+(r.likes||0)+' / 礼'+(r.gifts||0)+'</span></div>';
+        h += '<div class="stat-row"><span>'+d+'</span><span class="stat-n">赞'+(r.likes||0)+' / 礼'+(r.gifts||0)+' / 音浪'+(r.diamonds||0)+'</span></div>';
       });
     });
     p.statsBox.innerHTML = h;
@@ -1185,12 +1275,28 @@ PAGE = r"""<!DOCTYPE html>
     applyOrient();
   }
 
+  // 今日音浪：从服务器统计读取（不在前端累加，避免 SSE 历史回填重复计算）
+  var _dmTimer = null;
+  function refreshDiamonds(){
+    if (!curRoom) return;
+    fetch('/stats?room='+encodeURIComponent(curRoom)).then(function(r){ return r.json(); })
+      .then(function(s){ document.getElementById('diamondsToday').textContent = (s.diamonds_total||0).toLocaleString(); })
+      .catch(function(){});
+  }
+  function scheduleDiamonds(){
+    if (_dmTimer) return;
+    _dmTimer = setTimeout(function(){ _dmTimer = null; refreshDiamonds(); }, 1000);
+  }
+  setInterval(refreshDiamonds, 15000);
+
   function onEvent(ev){
+    if (ev.type === 'gift' && ev.diamonds) scheduleDiamonds();
     if (ev.type === 'stats'){ document.getElementById('online').textContent = ev.current; return; }
     if (ev.type === 'switch'){
       curRoom = ev.room;
       document.getElementById('room').textContent = ev.room;
       document.getElementById('online').textContent = '-';
+      refreshDiamonds();
       buffer.length = 0;
       rebuildPanels();   // 还原该房间各自保存的窗口布局
       loadRooms();
@@ -1395,7 +1501,7 @@ PAGE = r"""<!DOCTYPE html>
   es.onmessage = function(e){ try { onEvent(JSON.parse(e.data)); } catch(_){} };
 
   fetch('/room').then(function(r){ return r.text(); }).then(function(t){
-    curRoom=t; document.getElementById('room').textContent=t; loadRooms(); rebuildPanels();
+    curRoom=t; document.getElementById('room').textContent=t; loadRooms(); rebuildPanels(); refreshDiamonds();
   }).catch(function(){ rebuildPanels(); });
 </script>
 </body>
@@ -1595,8 +1701,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     global AUTH_PASSWORD
-    AUTH_PASSWORD = load_password()
+    AUTH_PASSWORD = load_password() if auth_enabled() else ""
     load_gift_names()
+    load_gift_diamonds()
 
     live_id = load_live_id()
     if not live_id:
@@ -1621,6 +1728,7 @@ def main():
     print(f"  抖音弹幕 Web UI 已启动  {VERSION}")
     print(f"  房间：{manager.live_id}")
     print(f"  在浏览器打开：{url}")
+    print(f"  密码验证：{'开启' if AUTH_PASSWORD else '关闭'}")
     print("  （按 Ctrl+C 结束）")
     print("=" * 52)
     if os.environ.get("DY_NO_BROWSER", "").strip() == "":
