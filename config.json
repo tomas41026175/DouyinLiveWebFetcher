@@ -1,0 +1,13 @@
+{
+  "_說明": "啟動設定：start_all.sh / start_all.bat / web_danmaku.py 共用。改完重新啟動即生效。",
+  "services": {
+    "danmaku": true,
+    "chatroom": true,
+    "tunnel": true,
+    "open_browser": true
+  },
+  "auth": {
+    "enabled": true
+  },
+  "room": "123456"
+}

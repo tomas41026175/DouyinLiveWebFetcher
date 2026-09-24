@@ -20,3 +20,5 @@ chatroom_url.txt
 frp.conf
 .frp/
 .frp_tunnel.log
+# 執行期產生的礼物單價表（id -> 音浪）
+gift_diamonds.json

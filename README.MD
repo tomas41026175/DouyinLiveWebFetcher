@@ -15,6 +15,28 @@
 - **改暱稱**：房內可改，首次掃碼進房（訪客）自動提示
 - **彈幕分類過濾**：聊天 / 禮物 / 進場 / 關注 / 讚 / 聊天室，chips 勾選顯示
 - **cache 對話**：當天訊息保留（重整 / 重連可見），UTC+8 每日重置
+- **今日音浪**：webUI 頂部即時顯示當日禮物價值（音浪）總計；「统计」窗口另有音浪總計與音浪排行（連擊禮物只計增量，不重複累加）
+- **config.json 啟動設定**：決定要啟動哪些項目、是否開啟密碼驗證（見下方）
+
+### 啟動設定（`config.json`）
+`start_all.sh` / `start_all.bat` / `web_danmaku.py` 共用，改完重新啟動即生效；檔案不存在或缺欄位時全部用預設值（全開）。
+
+```json
+{
+  "services": {
+    "danmaku": true,       // 抖音弹幕 webUI（web_danmaku.py）
+    "chatroom": true,      // 多人聊天室（chatroom/）
+    "tunnel": true,        // Cloudflare 隧道（聊天室公網網址；chatroom 關閉時自動略過）
+    "open_browser": true   // 啟動後自動開瀏覽器分頁
+  },
+  "auth": {
+    "enabled": true        // webUI 密碼驗證（密碼在 ui_password.txt）；false = 免密碼
+  },
+  "room": "123456"         // 啟動後聊天室自動進入的房號
+}
+```
+> 實際檔案為標準 JSON（不能有註解）。環境變數 `DY_AUTH=0/1` 可覆蓋 `auth.enabled`。
+> 貼圖管理頁 `/admin` 因聊天室對外公開，**永遠需要密碼**，不受 `auth.enabled` 影響。
 
 ### 雲端部署（生產）
 整份專案（`web_danmaku` + `chatroom`）部署到海外 VPS、systemd 常駐。

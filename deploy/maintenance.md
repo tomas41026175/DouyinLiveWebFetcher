@@ -150,6 +150,11 @@ systemctl daemon-reload
 systemctl restart danmaku chatroom
 ```
 
+### 關閉 / 開啟 webUI 密碼驗證
+
+在 danmaku unit 加 `Environment=DY_AUTH=0`（或在 `/root/danmaku/config.json` 設 `"auth": {"enabled": false}`），`systemctl restart danmaku`。
+⚠️ VPS 上 webUI 若對外（`DY_BIND=0.0.0.0`），關閉驗證等於任何人都能看彈幕 / 切房間，建議保持開啟。
+
 ### 看版本
 
 ```bash
@@ -262,4 +267,5 @@ scp root@167.179.84.87:/root/danmaku/.env ~/vps-backup/
 | `LIVE_ID` | danmaku | `.env`，抖音房間數字 |
 | `DY_NO_AUTOCLOSE=1` | danmaku | 不自動關閉（伺服器常駐必要） |
 | `DY_NO_BROWSER=1` | danmaku | 不開瀏覽器 |
+| `DY_AUTH=0` | danmaku | 關閉 webUI 密碼驗證（未設時讀 `config.json` 的 `auth.enabled`，預設開啟）；關閉時 chatroom 的 `DANMAKU_PASSWORD` 可留空 |
 | `PYTHONUNBUFFERED=1` | danmaku | log 即時 flush |

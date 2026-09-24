@@ -5,13 +5,13 @@ cd /d "%~dp0"
 
 REM 一鍵啟動（Windows）：檢測/安裝環境 → 啟動 web_danmaku(本機) + chatroom，
 REM 聊天室透過 Cloudflare 取得公網網址分享給朋友（不走 localhost）。
+REM 啟動項目 / 密碼驗證 / 房號由 config.json 決定（services.* / auth.enabled / room）。
 REM 注意：本檔需為 CRLF 行尾（cmd.exe 要求）。
 
 set "DANMAKU_PORT=8765"
 set "CHAT_PORT=3000"
 set "CF_LOG=.cf_tunnel.log"
 set "CHAT_URL_FILE=chatroom_url.txt"
-set "ROOM=123456"
 
 REM ---------- 版本 + 自動更新 ----------
 set "VERSION=unknown"
@@ -41,9 +41,22 @@ if not defined DY_SELF_UPDATED (
   )
 )
 
+REM ---------- 讀取 config.json（缺檔 / 缺欄位時用預設值）----------
+set "RUN_DANMAKU=1" & set "RUN_CHATROOM=1" & set "RUN_TUNNEL=1" & set "OPEN_BROWSER=1" & set "AUTH_ENABLED=1" & set "ROOM=123456"
+REM config.json 不存在、格式錯誤或缺欄位時，各欄位回傳預設值
+for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -Command "$c=$null; try { $c=ConvertFrom-Json -InputObject (Get-Content -Raw -Encoding UTF8 'config.json') } catch {}; function b($v,$d){ if($null -eq $v){$d} elseif($v){1} else{0} }; 'RUN_DANMAKU='+(b $c.services.danmaku 1); 'RUN_CHATROOM='+(b $c.services.chatroom 1); 'RUN_TUNNEL='+(b $c.services.tunnel 1); 'OPEN_BROWSER='+(b $c.services.open_browser 1); 'AUTH_ENABLED='+(b $c.auth.enabled 1); if($c.room){'ROOM='+$c.room}"`) do set "%%a=%%b"
+if not "%RUN_CHATROOM%"=="1" set "RUN_TUNNEL=0"
+echo     config: 弹幕=%RUN_DANMAKU% 聊天室=%RUN_CHATROOM% 隧道=%RUN_TUNNEL% 開瀏覽器=%OPEN_BROWSER% 密碼驗證=%AUTH_ENABLED%  ^(1=開 0=關^)
+if not "%RUN_DANMAKU%"=="1" if not "%RUN_CHATROOM%"=="1" (echo [錯誤] config.json 的 services.danmaku 與 services.chatroom 皆為 false，沒有要啟動的服務 & pause & exit /b 1)
+
 echo ==^> [1/5] 檢測 Python / Node / cloudflared
-where python >nul 2>nul || (echo [錯誤] 找不到 python，請安裝 Python 3.x 並加入 PATH & pause & exit /b 1)
-where node   >nul 2>nul || (echo [錯誤] 找不到 node，請安裝 Node.js 18+ & pause & exit /b 1)
+if "%RUN_DANMAKU%"=="1" (
+  where python >nul 2>nul || (echo [錯誤] 找不到 python，請安裝 Python 3.x 並加入 PATH & pause & exit /b 1)
+)
+if "%RUN_CHATROOM%"=="1" (
+  where node >nul 2>nul || (echo [錯誤] 找不到 node，請安裝 Node.js 18+ & pause & exit /b 1)
+)
+if not "%RUN_TUNNEL%"=="1" goto after_cloudflared
 where cloudflared >nul 2>nul
 if errorlevel 1 (
   echo     未裝 cloudflared，嘗試以 winget 安裝...
@@ -52,8 +65,10 @@ if errorlevel 1 (
   set "PATH=!PATH!;!LOCALAPPDATA!\Microsoft\WinGet\Links"
   where cloudflared >nul 2>nul || (echo [提示] cloudflared 可能已安裝但本視窗 PATH 未更新，請關閉本視窗重新執行 start_all.bat & pause & exit /b 1)
 )
+:after_cloudflared
 
 echo ==^> [2/5] Python venv + 依賴
+if not "%RUN_DANMAKU%"=="1" ( echo     （略過：未啟用弹幕） & goto after_pydeps )
 if not exist "venv\Scripts\python.exe" ( python -m venv venv )
 set "VPY=venv\Scripts\python.exe"
 "%VPY%" -c "import websocket, betterproto, py_mini_racer, execjs, requests" 2>nul
@@ -63,16 +78,17 @@ if errorlevel 1 (
   "%VPY%" -m pip install -q -r requirements.txt
   if errorlevel 1 echo     [警告] 部分 Python 依賴安裝失敗：抖音抓取可能不可用，聊天室仍可運作
 )
+:after_pydeps
 
 echo ==^> [3/5] chatroom (Node) 依賴
-if not exist "chatroom\node_modules" (
+if not "%RUN_CHATROOM%"=="1" ( echo     （略過：未啟用聊天室） ) else if not exist "chatroom\node_modules" (
   pushd chatroom
   call npm install --no-fund --no-audit
   if errorlevel 1 ( echo [錯誤] npm install 失敗 & popd & pause & exit /b 1 )
   popd
 )
 
-echo ==^> [4/5] 啟動 web_danmaku + chatroom（本機）
+echo ==^> [4/5] 啟動本機服務
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%DANMAKU_PORT% " ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>nul
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%CHAT_PORT% " ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>nul
 if exist "%CHAT_URL_FILE%" del "%CHAT_URL_FILE%"
@@ -80,24 +96,30 @@ if exist "%CF_LOG%" del "%CF_LOG%"
 
 set "PW=0425"
 if exist "ui_password.txt" set /p PW=<ui_password.txt
+if "%PW%"=="" set "PW=0425"
 set "DY_NO_AUTOCLOSE=1"
 set "DY_NO_BROWSER=1"
-start "抖音弹幕 web_danmaku (勿關)" cmd /k ""%VPY%" web_danmaku.py"
+set "DY_AUTH=%AUTH_ENABLED%"
+if "%RUN_DANMAKU%"=="1" start "抖音弹幕 web_danmaku (勿關)" cmd /k ""%VPY%" web_danmaku.py"
 
+REM 密碼驗證關閉時：chatroom 連 webUI 不帶密碼（貼圖管理頁仍需密碼，因聊天室對外公開）
 set "PORT=%CHAT_PORT%"
-set "DANMAKU_URL=http://127.0.0.1:%DANMAKU_PORT%"
-set "DANMAKU_PASSWORD=%PW%"
+set "DANMAKU_URL="
+if "%RUN_DANMAKU%"=="1" set "DANMAKU_URL=http://127.0.0.1:%DANMAKU_PORT%"
+set "DANMAKU_PASSWORD="
+if "%AUTH_ENABLED%"=="1" set "DANMAKU_PASSWORD=%PW%"
 set "STICKER_ADMIN_PASSWORD=%PW%"
 set "STICKER_GIT_SYNC=1"
 set "STICKER_GIT_POLL=1"
-start "聊天室 chatroom (勿關)" cmd /k "node chatroom\server.js"
+if "%RUN_CHATROOM%"=="1" start "聊天室 chatroom (勿關)" cmd /k "node chatroom\server.js"
 
 echo ==^> [5/5] 建立 Cloudflare 隧道（聊天室公網網址）
+set "PUBLIC_URL="
+if not "%RUN_TUNNEL%"=="1" ( echo     （略過：未啟用隧道） & goto after_tunnel )
 REM 重定向整段用引號包成 cmd /k 的單一命令，讓 ^> 綁在 cloudflared 而非外層 cmd；用相對路徑避開引號地獄
 start "Cloudflare 隧道 (勿關)" cmd /k "cloudflared tunnel --url http://localhost:%CHAT_PORT% > .cf_tunnel.log 2>&1"
 
 echo     等待公網網址...
-set "PUBLIC_URL="
 for /l %%i in (1,1,30) do (
   if not defined PUBLIC_URL (
     for /f "usebackq delims=" %%u in (`powershell -NoProfile -Command "$t=Get-Content -Raw -ErrorAction SilentlyContinue '%CF_LOG%'; if($t -match 'https://[a-z0-9-]+\.trycloudflare\.com'){$matches[0]}"`) do set "PUBLIC_URL=%%u"
@@ -105,27 +127,40 @@ for /l %%i in (1,1,30) do (
   )
 )
 if defined PUBLIC_URL (>"%CHAT_URL_FILE%" echo|set /p="!PUBLIC_URL!")
+:after_tunnel
 
 echo.
 echo ============================================================
 if defined PUBLIC_URL (
   echo   聊天室（分享給朋友這個網址，中國可連^)：
   echo        !PUBLIC_URL!
-) else (
+) else if "%RUN_TUNNEL%"=="1" (
   echo   [警告] 未取得 Cloudflare 網址，看 %CF_LOG%；本機自測 http://localhost:%CHAT_PORT%
+) else if "%RUN_CHATROOM%"=="1" (
+  echo   聊天室（僅本機^): http://localhost:%CHAT_PORT%
 )
-echo   抖音弹幕 webUI（本機自己看^): http://127.0.0.1:%DANMAKU_PORT%  ^(密碼 %PW%^)
+if "%RUN_DANMAKU%"=="1" (
+  if "%AUTH_ENABLED%"=="1" (
+    echo   抖音弹幕 webUI（本機自己看^): http://127.0.0.1:%DANMAKU_PORT%  ^(密碼 %PW%^)
+  ) else (
+    echo   抖音弹幕 webUI（本機自己看^): http://127.0.0.1:%DANMAKU_PORT%  ^(密碼驗證已關閉^)
+  )
+)
 echo.
-echo   關閉彈出的三個視窗即可停止對應服務
+echo   關閉彈出的視窗即可停止對應服務
 echo ============================================================
 
-REM 自動開啟兩個網址：抖音 webUI + 聊天室（直接進房號 %ROOM%）
-start "" "http://127.0.0.1:%DANMAKU_PORT%/"
-if defined PUBLIC_URL (
-  start "" "!PUBLIC_URL!/?room=%ROOM%"
-) else (
-  start "" "http://localhost:%CHAT_PORT%/?room=%ROOM%"
+REM 自動開啟網址：抖音 webUI + 聊天室（直接進房號 %ROOM%）
+if not "%OPEN_BROWSER%"=="1" goto after_browser
+if "%RUN_DANMAKU%"=="1" start "" "http://127.0.0.1:%DANMAKU_PORT%/"
+if "%RUN_CHATROOM%"=="1" (
+  if defined PUBLIC_URL (
+    start "" "!PUBLIC_URL!/?room=%ROOM%"
+  ) else (
+    start "" "http://localhost:%CHAT_PORT%/?room=%ROOM%"
+  )
 )
+:after_browser
 
 pause
 endlocal
