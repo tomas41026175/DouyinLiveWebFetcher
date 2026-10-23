@@ -1,0 +1,42 @@
+name: status-gate
+
+# 改到程式碼的 PR 必須同時更新 STATUS.md（workbench 統一格式）。
+# 豁免：加上 `skip-status` label。
+# 哪些檔案「不算程式碼」：.github/status-gate-ignore（每行一個 regex）；檔案不存在時用預設清單。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  status-md:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-status') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: STATUS.md must change with code
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA")
+          if [ -f .github/status-gate-ignore ]; then
+            ignore=$(grep -vE '^[[:space:]]*(#|$)' .github/status-gate-ignore | paste -sd'|' -)
+          else
+            ignore='\.md$|^docs/|^changelog/|^\.github/|^tests?/|(^|/)test_[^/]*\.py$|^dev-log/|^planning/'
+          fi
+          code=$(printf '%s\n' "$changed" | grep -vE "$ignore" | grep -v '^$' || true)
+          if [ -z "$code" ]; then
+            echo "只有文件／測試／CI 變更，不需更新 STATUS.md"
+            exit 0
+          fi
+          if printf '%s\n' "$changed" | grep -qx 'STATUS.md'; then
+            echo "✅ STATUS.md 已更新"
+            exit 0
+          fi
+          echo "::error title=STATUS.md 未更新::這個 PR 改到程式碼，請同步更新 STATUS.md（目前進度、下一步）。不需要的話加上 skip-status label。"
+          echo "改到的程式碼檔案："
+          printf '  %s\n' $code
+          exit 1
