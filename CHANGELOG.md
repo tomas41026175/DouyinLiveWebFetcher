@@ -4,6 +4,13 @@ DouyinLiveWebFetcher（抖音彈幕抓取 + 多人聊天室整合）的變更紀
 版本號以根目錄 `VERSION` 為準；聊天室本身 v1.0–v1.2 的細節見 [docs/chatroom/CHANGELOG.md](docs/chatroom/CHANGELOG.md)。
 沒有版本 tag，以下依 PR 合併日期整理；1.3.0 以前的 `VERSION` 對應待確認。
 
+## 2026-10-24
+
+### 安全
+- `ui_password.txt` 移出版本庫並加入 `.gitignore`（本 repo 為公開）；移除原始碼中寫死的預設密碼，
+  無環境變數與密碼檔時改為產生隨機密碼、以 600 權限寫檔並在主控台印出一次。已部署的機器沿用既有密碼檔，不受影響；
+  舊密碼已在 git 歷史公開，**必須更換**（步驟見 `deploy/maintenance.md`〈改 webUI 密碼〉）。
+
 ## 2026-10-23
 
 ### 文件

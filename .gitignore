@@ -10,7 +10,8 @@ venv/
 *.pyc
 
 # 整合新增：不推大型 / 執行期產物
-# （private repo，故 LIVE_ID 的 .env 與密碼 ui_password.txt 允許入庫）
+# 本 repo 為公開：密碼檔不可入庫（.env 只含 LIVE_ID，允許入庫）
+ui_password.txt
 stats/
 rooms.json
 chatroom_url.txt

@@ -139,6 +139,8 @@ ssh root@167.179.84.87 'printf "新密碼" > /root/.sticker_admin_pw && systemct
 
 ### 改 webUI 密碼（你自己看彈幕用）
 
+> 密碼檔不入庫（repo 公開）。新機器沒有密碼檔時，第一次啟動會產生隨機密碼並印在 log（`journalctl -u danmaku`）。
+
 webUI 密碼要**同步改兩處**（否則 chatroom 抓不到彈幕）：
 ```bash
 ssh root@167.179.84.87
