@@ -195,5 +195,41 @@ class HttpAuthTest(_IsolatedCwd):
         self.assertIn('id="diamondsToday"', body)
 
 
+class LoadPasswordTest(unittest.TestCase):
+    """密碼來源：環境變數 > ui_password.txt > 隨機產生（不再有寫死的預設值）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.old = (w.PW_PATH, os.environ.pop("DY_UI_PASSWORD", None))
+        w.PW_PATH = os.path.join(self.tmp, "ui_password.txt")
+
+    def tearDown(self):
+        w.PW_PATH = self.old[0]
+        if self.old[1] is not None:
+            os.environ["DY_UI_PASSWORD"] = self.old[1]
+        else:
+            os.environ.pop("DY_UI_PASSWORD", None)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_env_wins(self):
+        os.environ["DY_UI_PASSWORD"] = "from-env"
+        self.assertEqual(w.load_password(), "from-env")
+
+    def test_file_used(self):
+        with open(w.PW_PATH, "w", encoding="utf-8") as f:
+            f.write("from-file\n")
+        self.assertEqual(w.load_password(), "from-file")
+
+    def test_random_when_missing(self):
+        a = w.load_password()
+        self.assertGreaterEqual(len(a), 12)
+        self.assertFalse(hasattr(w, "DEFAULT_PASSWORD"))
+        with open(w.PW_PATH, encoding="utf-8") as f:
+            self.assertEqual(f.read(), a)
+        if os.name == "posix":
+            self.assertEqual(os.stat(w.PW_PATH).st_mode & 0o777, 0o600)
+        self.assertEqual(w.load_password(), a)  # 第二次讀檔，不再重產
+
+
 if __name__ == "__main__":
     unittest.main()

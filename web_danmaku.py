@@ -13,6 +13,7 @@ import json
 import os
 import queue
 import re
+import secrets
 import sys
 import threading
 import time
@@ -37,7 +38,6 @@ PW_PATH = "ui_password.txt"
 CONFIG_PATH = "config.json"         # 啟動設定（services / auth），與 start_all 腳本共用
 GIFT_DIAMONDS_PATH = "gift_diamonds.json"   # 礼物 id -> 单价（音浪/抖币）
 CHAT_URL_FILE = "chatroom_url.txt"   # 啟動腳本寫入聊天室的 Cloudflare 公網網址
-DEFAULT_PASSWORD = "0425"
 AUTH_PASSWORD = ""
 HISTORY_MAX = 800           # 后端保留的最近弹幕条数（刷新后回填）
 
@@ -368,7 +368,8 @@ def auth_enabled():
 
 
 def load_password():
-    # 优先环境变量；其次 ui_password.txt；否则用默认密码并写入文件
+    # 优先环境变量；其次 ui_password.txt；否则产生随机密码写入文件（权限 600）并印出一次。
+    # 不再使用写死在原始码里的默认密码（repo 为公开，默认值等于公开）。
     p = os.environ.get("DY_UI_PASSWORD", "").strip()
     if p:
         return p
@@ -379,12 +380,15 @@ def load_password():
                 return v
         except Exception:
             pass
+    pw = secrets.token_urlsafe(12)
     try:
-        with open(PW_PATH, "w", encoding="utf-8") as f:
-            f.write(DEFAULT_PASSWORD)
+        fd = os.open(PW_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(pw)
+        print(f"[webUI] 已产生随机密码并写入 {PW_PATH}：{pw}")
     except Exception:
-        pass
-    return DEFAULT_PASSWORD
+        print(f"[webUI] 无法写入 {PW_PATH}，本次随机密码：{pw}")
+    return pw
 
 
 # ---- 已保存房间（房号 + 备注），持久化到 rooms.json ----
